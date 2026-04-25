@@ -1,0 +1,37 @@
+[project]
+name = "pyft"
+version = "0.1.0"
+description = "VerifiedFT: A precise dynamic data race detector for Free-threaded Python"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
+    "pytest-timeout>=2.4.0",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+filterwarnings = ["ignore::DeprecationWarning"]
+# addopts = "--cov=pyft --cov-report=term-missing"
+
+[tool.coverage.run]
+source = ["pyft"]
+
+[tool.coverage.report]
+omit = [
+    "tests/*",
+    "__init__.py"
+]

@@ -1,0 +1,31 @@
+fail_fast: false
+repos:
+    # Python hooks & file hygiene
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-toml
+    -   id: check-ast
+    -   id: debug-statements
+    -   id: name-tests-test
+        args: [ --pytest-test-first ] # ensure tests match test_.*\.py
+-   repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.0
+    hooks:
+    -   id: ruff-format
+    -   id: ruff-check
+        args: [ --fix ]
+-   repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.19.1
+    hooks:
+    -   id: mypy
+    # cpp hooks
+-   repo: https://github.com/cpp-linter/cpp-linter-hooks
+    rev: v1.1.12
+    hooks:
+      - id: clang-format
+      - id: clang-tidy
+        args: [ --fix ]
