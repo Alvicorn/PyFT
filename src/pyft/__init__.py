@@ -3,43 +3,37 @@ PyFT — VerifiedFT precise dynamic race detector for free-threaded Python.
 
 Public API:
 
-  pyft.install()          Start the detector
-  pyft.uninstall()        Stop the detector and restore patched primitives
-  pyft.report()           Print the race report to stderr
-  pyft.races()            Return list[RaceReport] for programmatic inspection
-  pyft.reset()            Clear all recorded races (keeps detector running)
-  pyft.context()          Context manager: install on enter, report+uninstall on exit
-  @pyft.detect            Decorator: install around a function, report on return
-  pyft.get_engine()       Return the active Engine (for advanced inspection)
+  pyft.install(version="v2")     Start the detector
+  pyft.uninstall()               Stop the detector and restore patched primitives
+  pyft.report()                  Print the race report to stderr
+  pyft.races()                   list[RaceReport] for programmatic inspection
+  pyft.reset()                   Clear all recorded races (keeps detector running)
+  pyft.context(version="v2")     Context manager: install on enter, report on exit
+  @pyft.detect                   Decorator: install around a function, report on return
+  @pyft.detect(version="v1")     Decorator with an explicit VerifiedFT variant
+  pyft.get_engine()              Return the active Engine (for advanced inspection)
+
+The ``version`` argument picks which VerifiedFT analysis variant to use:
+
+  - "v1" — idealised analyser; stores a full VectorClock for the last
+           write and for the union of reads. Race checks use vc_leq.
+  - "v2" — optimised FastTrack-style analyser; stores a single Epoch for
+           the last write and a compressed read-state machine. Default.
 
 Typical usage:
 
   with pyft.context():
       import myapp                 # auto-traced by the import hook
       myapp.run_concurrent_code()
-
-Or as a decorator:
-
-  @pyft.detect
-  def test_my_concurrent_code():
-      import workload
-      workload.do_stuff()
-
-How tracing works: ``install()`` registers an AST-rewriting import hook
-plus monkey-patches for threading primitives. Any module imported AFTER
-install runs through the hook, so its attribute access, subscripts, and
-sync events feed the engine automatically. Modules imported BEFORE
-install are not instrumented — structure your code so the workload lives
-in a module that is imported inside the ``context()`` or ``@detect``
-scope, or run the whole program with ``python -m pyft script.py``.
 """
 
 from __future__ import annotations
 
 import contextlib
 from collections.abc import Callable, Iterator
-from typing import IO, TypeVar
+from typing import IO, TypeVar, overload
 
+from .core.var_state import VFTVersion
 from .detector.engine import Engine
 from .detector.race_log import RaceReport
 from .report.formatter import print_summary
@@ -64,19 +58,23 @@ _lock_patcher: LockPatcher | None = None
 _installed = False
 
 
-def install() -> None:
+def install(version: VFTVersion | str = VFTVersion.V2) -> None:
     """
     Start pyft. Monkey-patches threading.Lock, RLock, Semaphore,
     BoundedSemaphore, Event, Barrier, and Thread.start / Thread.join so
     the engine sees synchronization events synchronously with the
     operation, and installs an AST-rewriting import hook that
     instruments every newly-imported user module's attribute access.
+
+    ``version`` selects which VerifiedFT analyser to use ("v1" or "v2").
+    Re-installing with a different version is a no-op while the previous
+    install is still active; call ``uninstall()`` first.
     """
     global _engine, _auto_tracker, _access_tracer, _lock_patcher, _installed
     if _installed:
         return
 
-    _engine = Engine()
+    _engine = Engine(version=version)
     _lock_patcher = LockPatcher(_engine)
     _auto_tracker = AutoTracker(_engine)
     _access_tracer = AccessTracer(_engine)
@@ -134,7 +132,7 @@ def get_engine() -> Engine | None:
 
 
 @contextlib.contextmanager
-def context() -> Iterator[None]:
+def context(version: VFTVersion | str = VFTVersion.V2) -> Iterator[None]:
     """
     Context manager that installs pyft on enter and prints a race
     report + uninstalls on exit.
@@ -143,11 +141,11 @@ def context() -> Iterator[None]:
     AST-rewritten so its attribute access is traced.
 
     Example:
-        with pyft.context():
+        with pyft.context(version="v1"):
             import myapp
             myapp.run()
     """
-    install()
+    install(version=version)
     try:
         yield
     finally:
@@ -158,26 +156,34 @@ def context() -> Iterator[None]:
 _F = TypeVar("_F", bound=Callable[..., object])
 
 
-def detect(fn: _F) -> _F:
+@overload
+def detect(fn: _F) -> _F: ...
+@overload
+def detect(
+    fn: None = None, *, version: VFTVersion | str = VFTVersion.V2
+) -> Callable[[_F], _F]: ...
+
+
+def detect(fn=None, *, version: VFTVersion | str = VFTVersion.V2):  # type: ignore[no-untyped-def]
     """
     Decorator that runs a function under pyft and prints the race
-    report when it returns.
-
-    Example:
-        @pyft.detect
-        def test_concurrent():
-            import workload
-            workload.do_stuff()
+    report when it returns. Usable bare (``@pyft.detect``) or with a
+    ``version`` kwarg (``@pyft.detect(version="v1")``).
     """
 
-    def wrapper(*args: object, **kwargs: object) -> object:
-        install()
-        try:
-            return fn(*args, **kwargs)
-        finally:
-            uninstall()
-            report()
+    def _wrap(target: _F) -> _F:
+        def wrapper(*args: object, **kwargs: object) -> object:
+            install(version=version)
+            try:
+                return target(*args, **kwargs)
+            finally:
+                uninstall()
+                report()
 
-    wrapper.__name__ = fn.__name__
-    wrapper.__doc__ = fn.__doc__
-    return wrapper  # type: ignore[return-value]
+        wrapper.__name__ = target.__name__
+        wrapper.__doc__ = target.__doc__
+        return wrapper  # type: ignore[return-value]
+
+    if fn is None:
+        return _wrap
+    return _wrap(fn)

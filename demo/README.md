@@ -30,6 +30,7 @@ uv run python demo/api_usage.py
 | `thread_local_safe.py` | Each thread owns its object | 0 races (two-thread-touch rule) |
 | `fork_join_safe.py` | Parent writes before fork, reads after join | 0 races (fork + join HB) |
 | `producer_consumer.py` | `threading.Event.set` / `wait` establishes HB | 0 races |
+| `container_race.py` | Concurrent `list.append` + concurrent `dict.update` / `items` / `pop` | races on `__container__` for both the list and the dict |
 | `api_usage.py` | Embedded use of `pyft.context()` and `@pyft.detect` | 1 race + 0 races |
 
 ## How auto-trace works
@@ -39,9 +40,8 @@ When you run `python -m pyft myscript.py`, PyFT installs three things:
 1. **LockPatcher** — monkey-patches `threading.Lock`, `RLock`,
    `Semaphore`, `BoundedSemaphore`, `Event.set/wait`, and `Barrier.wait`
    so the engine sees synchronization events synchronously around the
-   real OS operation. This is necessary for reliable HB tracking under
-   free-threaded Python; asynchronous `sys.monitoring` callbacks don't
-   give strong enough ordering guarantees.
+   real OS operation. This gives deterministic event ordering under
+   free-threaded Python.
 2. **AutoTracker** — monkey-patches `Thread.start` and `Thread.join` so
    fork and join HB edges are recorded.
 3. **AccessTracer** — installs a PEP 302 import hook that AST-rewrites

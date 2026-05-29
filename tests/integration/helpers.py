@@ -12,6 +12,7 @@ import contextlib
 import threading
 from collections.abc import Callable, Iterator
 
+from pyft.core.var_state import VFTVersion
 from pyft.detector.engine import Engine
 from pyft.detector.race_log import RaceKind
 from pyft.instrument.lock_patcher import LockPatcher
@@ -19,16 +20,18 @@ from pyft.instrument.wrappers import AutoTracker, TrackedProxy
 
 
 @contextlib.contextmanager
-def pyft_session() -> Iterator[
-    tuple[Engine, Callable[[object], TrackedProxy]]
-]:
+def pyft_session(
+    version: VFTVersion | str = VFTVersion.V2,
+) -> Iterator[tuple[Engine, Callable[[object], TrackedProxy]]]:
     """
     Install LockPatcher + AutoTracker. The explicit monkey-patches in
     LockPatcher and AutoTracker cover all synchronization primitives
     the integration tests exercise (Lock, RLock, Semaphore,
     Thread.start, Thread.join).
+
+    ``version`` chooses the VerifiedFT analyzer variant ("v1" or "v2").
     """
-    engine = Engine()
+    engine = Engine(version=version)
     tracker = AutoTracker(engine)
     lock_patcher = LockPatcher(engine)
 

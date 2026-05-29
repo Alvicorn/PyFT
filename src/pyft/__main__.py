@@ -53,6 +53,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Disable ANSI colour in output",
     )
+    parser.add_argument(
+        "--version",
+        choices=["v1", "v2"],
+        default="v2",
+        help="VerifiedFT analyser variant: v1 (full vector clocks) or "
+        "v2 (epoch-compressed FastTrack, default)",
+    )
 
     args = parser.parse_args(argv)
 
@@ -64,7 +71,7 @@ def main(argv: list[str] | None = None) -> int:
 
     import pyft
 
-    pyft.install()
+    pyft.install(version=args.version)
 
     exit_code = 0
     try:
