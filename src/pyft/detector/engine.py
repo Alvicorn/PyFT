@@ -17,7 +17,14 @@ import threading
 
 from ..core.epoch import Epoch
 from ..core.thread_state import ThreadRegistry, ThreadState
-from ..core.var_state import ReadBottom, ReadEpoch, ReadState, ReadVC
+from ..core.var_state import (
+    ReadBottom,
+    ReadEpoch,
+    ReadState,
+    ReadVC,
+    VFTVersion,
+    make_var_state,
+)
 from ..core.vector_clock import VectorClock
 from .race_log import (
     AccessInfo,
@@ -53,11 +60,19 @@ class LockState:
 
 
 class Engine:
-    """VerifiedFT engine: receives instrumentation events, detects races."""
+    """VerifiedFT engine: receives instrumentation events, detects races.
 
-    def __init__(self) -> None:
+    The ``version`` argument selects which VerifiedFT analysis variant
+    is used for every per-variable VarState (V1 = full vector clocks,
+    V2 = epoch-compressed FastTrack). Defaults to V2.
+    """
+
+    def __init__(self, version: VFTVersion | str = VFTVersion.V2) -> None:
+        if isinstance(version, str):
+            version = VFTVersion(version)
+        self.version: VFTVersion = version
         self.thread_registry = ThreadRegistry()
-        self.shadow_map = ShadowMap()
+        self.shadow_map = ShadowMap(var_state_factory=make_var_state(version))
         self.race_log = RaceLog()
 
         self._lock_states: dict[int, LockState] = {}

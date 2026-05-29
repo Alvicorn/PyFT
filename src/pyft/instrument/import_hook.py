@@ -1,6 +1,7 @@
 """
 PEP 302 import hook that AST-rewrites every user module's source so
-attribute reads, writes, and subscripts call into the engine:
+attribute reads, writes, subscripts, and container-method mutations
+call into the engine:
 
   obj.attr              -> _pyft_get(_pyft_engine, obj, 'attr')
   obj.attr = v          -> _pyft_set(_pyft_engine, obj, 'attr', v)
@@ -8,6 +9,14 @@ attribute reads, writes, and subscripts call into the engine:
                                      _pyft_get(eng, obj, 'attr') + v)
   obj[k]                -> _pyft_getitem(eng, obj, k)
   obj[k] = v            -> _pyft_setitem(eng, obj, k, v)
+  obj.append(x)         -> _pyft_method(eng, obj, 'append', x)  # mutator
+  obj.get(k)            -> _pyft_method(eng, obj, 'get', k)     # reader
+
+Container mutators / readers are recognized by **method name** from a
+curated set; calls of those names trigger a synthetic
+``__container__`` write / read on the receiver so two threads
+mutating the same list / dict / set / bytearray are detected as a
+race.
 
 The rewritten module imports a synthetic ``pyft._pyft_runtime`` module
 that exposes the engine and the helper functions.
@@ -31,6 +40,48 @@ if TYPE_CHECKING:
 
 
 _RUNTIME_MODULE_NAME = "pyft._pyft_runtime"
+
+# Method names treated as container mutations / reads. Matched by
+# string only — any object with a method of these names is treated as
+# a container for race-detection purposes (over-approximates, never
+# under-reports).
+_CONTAINER_MUTATORS: frozenset[str] = frozenset(
+    {
+        "append",
+        "extend",
+        "insert",
+        "remove",
+        "pop",
+        "popitem",
+        "clear",
+        "sort",
+        "reverse",
+        "update",
+        "setdefault",
+        "add",
+        "discard",
+        "intersection_update",
+        "difference_update",
+        "symmetric_difference_update",
+    }
+)
+_CONTAINER_READERS: frozenset[str] = frozenset(
+    {
+        "get",
+        "keys",
+        "values",
+        "items",
+        "index",
+        "count",
+        "copy",
+        "union",
+        "intersection",
+        "difference",
+        "issubset",
+        "issuperset",
+    }
+)
+_CONTAINER_METHODS: frozenset[str] = _CONTAINER_MUTATORS | _CONTAINER_READERS
 
 
 def _make_runtime_module(engine: "Engine") -> types.ModuleType:
@@ -83,11 +134,33 @@ def _make_runtime_module(engine: "Engine") -> types.ModuleType:
         obj[key] = value
         return value
 
+    def _pyft_method(
+        eng: "Engine",
+        obj: Any,  # noqa: ANN401
+        name: str,
+        *args: Any,  # noqa: ANN401
+        **kwargs: Any,  # noqa: ANN401
+    ) -> Any:  # noqa: ANN401
+        # Synthetic container event: mutators write the container,
+        # readers read it. The actual call always runs.
+        if name in _CONTAINER_MUTATORS:
+            try:
+                eng.write(obj, "__container__")
+            except Exception:
+                pass
+        elif name in _CONTAINER_READERS:
+            try:
+                eng.read(obj, "__container__")
+            except Exception:
+                pass
+        return getattr(obj, name)(*args, **kwargs)
+
     mod._pyft_engine = engine  # type: ignore[attr-defined]
     mod._pyft_get = _pyft_get  # type: ignore[attr-defined]
     mod._pyft_set = _pyft_set  # type: ignore[attr-defined]
     mod._pyft_getitem = _pyft_getitem  # type: ignore[attr-defined]
     mod._pyft_setitem = _pyft_setitem  # type: ignore[attr-defined]
+    mod._pyft_method = _pyft_method  # type: ignore[attr-defined]
     return mod
 
 
@@ -96,6 +169,7 @@ _RT_GET = "__pyft_get__"
 _RT_SET = "__pyft_set__"
 _RT_GETITEM = "__pyft_getitem__"
 _RT_SETITEM = "__pyft_setitem__"
+_RT_METHOD = "__pyft_method__"
 
 
 class _AccessTransformer(ast.NodeTransformer):
@@ -242,6 +316,44 @@ class _AccessTransformer(ast.NodeTransformer):
         # del obj.attr / del obj[k] are not instrumented.
         return node
 
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        """
+        Rewrite ``obj.<container_method>(*args, **kw)`` into
+        ``_pyft_method(eng, obj, '<name>', *args, **kw)``. Non-method
+        calls and method calls whose name is not in the container set
+        pass through unchanged (with their children still visited).
+
+        We intercept BEFORE ``generic_visit`` so that the receiver
+        ``obj`` is visited as an expression in its own right (any nested
+        attribute access in it gets the usual ``_pyft_get`` wrapping)
+        instead of having ``visit_Attribute`` rewrite the
+        ``obj.<method>`` lookup into a getattr call.
+        """
+        func = node.func
+        if (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.ctx, ast.Load)
+            and func.attr in _CONTAINER_METHODS
+        ):
+            receiver = self.visit(func.value)
+            method_name = func.attr
+            new_args = [self.visit(a) for a in node.args]
+            new_keywords = [self.visit(k) for k in node.keywords]
+            call = ast.Call(
+                func=ast.Name(id=_RT_METHOD, ctx=ast.Load()),
+                args=[
+                    ast.Name(id=_RT_ENGINE, ctx=ast.Load()),
+                    receiver,
+                    ast.Constant(value=method_name),
+                    *new_args,
+                ],
+                keywords=new_keywords,
+            )
+            return ast.copy_location(call, node)
+        # All other calls: normal recursion.
+        self.generic_visit(node)
+        return node
+
 
 def _prepend_runtime_import(tree: ast.Module) -> None:
     """
@@ -256,6 +368,7 @@ def _prepend_runtime_import(tree: ast.Module) -> None:
             ast.alias(name="_pyft_set", asname=_RT_SET),
             ast.alias(name="_pyft_getitem", asname=_RT_GETITEM),
             ast.alias(name="_pyft_setitem", asname=_RT_SETITEM),
+            ast.alias(name="_pyft_method", asname=_RT_METHOD),
         ],
         level=0,
     )

@@ -1,8 +1,10 @@
 import gc
 import threading
 
-from pyft.core.var_state import VarState
+from pyft.core.var_state import VarStateV2
 from pyft.detector.shadow_map import ShadowMap
+
+VarState = VarStateV2
 
 
 class SimpleObj:
