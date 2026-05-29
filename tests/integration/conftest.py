@@ -1,5 +1,5 @@
 """
-Integration tests require Python 3.12+ (sys.monitoring / SyncMonitor).
+Integration tests require Python 3.12+ (sys.monitoring).
 Skip automatically on older runtimes.
 """
 

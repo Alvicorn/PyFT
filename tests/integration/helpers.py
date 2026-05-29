@@ -17,27 +17,16 @@ from pyft.detector.race_log import RaceKind
 from pyft.instrument.lock_patcher import LockPatcher
 from pyft.instrument.wrappers import AutoTracker, TrackedProxy
 
-try:
-    from pyft.instrument.monitor import SyncMonitor
-
-    _HAS_MONITORING = True
-except AttributeError, ImportError:
-    SyncMonitor = None  # type: ignore[assignment]
-    _HAS_MONITORING = False
-
 
 @contextlib.contextmanager
 def pyft_session() -> Iterator[
     tuple[Engine, Callable[[object], TrackedProxy]]
 ]:
     """
-    Install LockPatcher + AutoTracker. SyncMonitor is intentionally
-    *not* installed here because its sys.monitoring callbacks introduce
-    non-deterministic interleavings that surface as flaky race reports
-    on properly-synchronized code under free-threaded Python. The
-    explicit monkey-patches in LockPatcher and AutoTracker cover all
-    synchronization primitives the integration tests exercise
-    (Lock, RLock, Semaphore, Thread.start, Thread.join).
+    Install LockPatcher + AutoTracker. The explicit monkey-patches in
+    LockPatcher and AutoTracker cover all synchronization primitives
+    the integration tests exercise (Lock, RLock, Semaphore,
+    Thread.start, Thread.join).
     """
     engine = Engine()
     tracker = AutoTracker(engine)
