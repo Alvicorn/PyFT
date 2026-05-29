@@ -8,18 +8,16 @@ Events handled:
   lock_release(lock_id)     - a thread released a lock
   thread_start(parent_tid, child_tid, child_name)
   thread_finish(tid)        - thread is about to exit
-
-Thread-safety: fine-grained per-variable, per-lock, and per-registry locks.
-No global engine lock is held during access checks.
+  thread_join(joiner_tid, joinee_tid)
 """
 
 from __future__ import annotations
 
-import logging
 import threading
 
+from ..core.epoch import Epoch
 from ..core.thread_state import ThreadRegistry, ThreadState
-from ..core.var_state import ReadBottom, ReadEpoch, ReadVC
+from ..core.var_state import ReadBottom, ReadEpoch, ReadState, ReadVC
 from ..core.vector_clock import VectorClock
 from .race_log import (
     AccessInfo,
@@ -31,47 +29,45 @@ from .race_log import (
 )
 from .shadow_map import ShadowMap
 
-log = logging.getLogger(__name__)
+_real_lock = threading.Lock
 
 
 def _cur_tid() -> int:
-    """Stable per-thread identity: id() of the current Thread object.
+    """
+    Stable per-thread id: ``id()`` of the current Thread object.
 
-    Unlike threading.get_ident(), this is never reused within a session
-    because Thread objects outlive their OS thread.
+    Never reused within a session because Thread objects outlive their
+    OS thread. Preferable to ``threading.get_ident()`` here.
     """
     return id(threading.current_thread())
 
 
 class LockState:
+    """Engine-side state for one user lock id: its lock + last release VC."""
+
     __slots__ = ("_lock", "release_vc")
 
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        self._lock = _real_lock()
         self.release_vc: VectorClock | None = None
 
 
 class Engine:
+    """VerifiedFT engine: receives instrumentation events, detects races."""
+
     def __init__(self) -> None:
         self.thread_registry = ThreadRegistry()
         self.shadow_map = ShadowMap()
         self.race_log = RaceLog()
 
         self._lock_states: dict[int, LockState] = {}
-        self._lock_states_mu = threading.Lock()
+        self._lock_states_mu = _real_lock()
 
-        # per-thread reentrancy guard (depth counter)
         self._active = threading.local()
-        # per-thread guard against recursive race recording
         self._recording = threading.local()
 
-        # register main thread at construction (fork HB from birth)
         main_tid = id(threading.main_thread())
         self.thread_registry.register(main_tid, name="MainThread")
-
-        log.info("Engine initialized")
-
-    ### Re-entrancy guard ###
 
     def _enter(self) -> bool:
         if getattr(self._active, "depth", 0) > 0:
@@ -81,8 +77,6 @@ class Engine:
 
     def _exit(self) -> None:
         self._active.depth = 0
-
-    ### Public memory access API ###
 
     def read(self, obj: object, attr: str) -> None:
         if not self._enter():
@@ -100,16 +94,12 @@ class Engine:
         finally:
             self._exit()
 
-    ### VerifiedFT read rule ###
-
     def _read_impl(self, obj: object, attr: str) -> None:
         tid = _cur_tid()
         ts = self.thread_registry.get_or_register(tid)
         ts.tick()
         var = self.shadow_map.get_or_create(obj, attr)
 
-        # check_read returns (race, prior_write_epoch) atomically from
-        # inside VarState's lock — no TOCTOU between check and reporting.
         race, prior_write_epoch = var.check_read(tid, ts.snapshot())
 
         if race:
@@ -123,18 +113,12 @@ class Engine:
                 prior_epoch=prior_write_epoch,
             )
 
-    ### VerifiedFT write rule ###
-
     def _write_impl(self, obj: object, attr: str) -> None:
         tid = _cur_tid()
         ts = self.thread_registry.get_or_register(tid)
         ts.tick()
         var = self.shadow_map.get_or_create(obj, attr)
 
-        # check_write returns (read_race, write_race, prior_write_epoch,
-        # prior_read_state).  All captured atomically inside VarState's lock.
-        # This eliminates the TOCTOU where an external snapshot would see
-        # stale (bottom) values when two threads race to write concurrently.
         read_race, write_race, prior_write_epoch, prior_read_state = (
             var.check_write(tid, ts.snapshot())
         )
@@ -158,13 +142,7 @@ class Engine:
                 prior_read_state=prior_read_state,
             )
 
-    ### Synchronization events ###
-
     def lock_acquire(self, lock_id: int) -> None:
-        # If we're already inside an engine operation, the lock being acquired
-        # is an internal PyFT lock. Treating it as a user HB edge would cause
-        # child threads to absorb each other's VCs through PyFT-internal locks,
-        # masking real races.  Skip it.
         if not self._enter():
             return
         try:
@@ -194,36 +172,46 @@ class Engine:
         self, parent_tid: int, child_tid: int, child_name: str = ""
     ) -> None:
         """
-        Fork HB edge: child inherits parent's VC; parent ticks.
+        Fork HB edge: child inherits parent's VC, parent ticks.
 
-        Idempotent for child registration. It is safe to call from
-        both AutoTracker (parent thread) and SyncMonitor (child thread)
-        when both are installed simultaneously.
+        Idempotent for child registration: only the first call ticks the
+        parent, so installing two thread observers cannot double-tick.
         """
-        parent_ts = self.thread_registry.get_or_register(parent_tid)
-        child_vc = parent_ts.snapshot()
+        if not self._enter():
+            return
+        try:
+            parent_ts = self.thread_registry.get_or_register(parent_tid)
 
-        # only register child if not already present to prevent
-        # double-registration when AutoTracker + SyncMonitor coexist
-        if self.thread_registry.get(child_tid) is None:
-            self.thread_registry.register(
-                child_tid, initial_vc=child_vc, name=child_name
-            )
-        parent_ts.tick()
+            if self.thread_registry.get(child_tid) is None:
+                child_vc = parent_ts.snapshot()
+                self.thread_registry.register(
+                    child_tid, initial_vc=child_vc, name=child_name
+                )
+                parent_ts.tick()
+        finally:
+            self._exit()
 
     def thread_finish(self, tid: int) -> None:
-        ts = self.thread_registry.get(tid)
-        if ts is not None:
-            ts.tick()
+        if not self._enter():
+            return
+        try:
+            ts = self.thread_registry.get(tid)
+            if ts is not None:
+                ts.tick()
+        finally:
+            self._exit()
 
     def thread_join(self, joiner_tid: int, joinee_tid: int) -> None:
-        joiner_ts = self.thread_registry.get_or_register(joiner_tid)
-        joinee_ts = self.thread_registry.get(joinee_tid)
-        if joinee_ts is not None:
-            joiner_ts.absorb(joinee_ts.vc)
-        self.thread_registry.remove(joinee_tid)
-
-    ### Internal helpers ###
+        if not self._enter():
+            return
+        try:
+            joiner_ts = self.thread_registry.get_or_register(joiner_tid)
+            joinee_ts = self.thread_registry.get(joinee_tid)
+            if joinee_ts is not None:
+                joiner_ts.absorb(joinee_ts.snapshot())
+            self.thread_registry.remove(joinee_tid)
+        finally:
+            self._exit()
 
     def _get_lock_state(self, lock_id: int) -> LockState:
         with self._lock_states_mu:
@@ -239,7 +227,7 @@ class Engine:
         current_tid: int,
         current_ts: ThreadState,
         is_write: bool,
-        prior_epoch,
+        prior_epoch: Epoch | None,
     ) -> None:
         if prior_epoch is None or prior_epoch.is_bottom():
             return
@@ -277,7 +265,7 @@ class Engine:
                     access_a=access_a,
                     access_b=access_b,
                     obj_id=id(obj),
-                    sequence=self.race_log.next_sequence(),
+                    sequence=0,
                 )
             )
         finally:
@@ -289,9 +277,8 @@ class Engine:
         attr: str,
         current_tid: int,
         current_ts: ThreadState,
-        prior_read_state,
+        prior_read_state: ReadState,
     ) -> None:
-        """Record a read-write race using a snapshot of the prior read state."""
         if isinstance(prior_read_state, ReadBottom):
             return
 
@@ -335,7 +322,7 @@ class Engine:
                     access_a=access_a,
                     access_b=access_b,
                     obj_id=id(obj),
-                    sequence=self.race_log.next_sequence(),
+                    sequence=0,
                 )
             )
         finally:

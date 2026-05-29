@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+from typing import IO
 
 from ..detector.race_log import RaceLog, RaceReport
 from .race import RaceKind
@@ -29,13 +30,11 @@ def _kind_label(kind: RaceKind) -> str:
 def format_report(report: RaceReport, use_colour: bool = True) -> str:
     lines: list[str] = []
 
-    # header
     kind_str = _kind_label(report.kind)
     header = f"── Race #{report.sequence}: {kind_str} "
     header = header + "─" * max(0, _WIDTH - len(header))
     lines.append(_colour(header, _BOLD + _RED, use_colour))
 
-    # object / attr
     lines.append(f"  Object : {report.access_a.obj_repr}")
     lines.append(f"  Attr   : {report.access_a.attr}")
     lines.append("")
@@ -54,7 +53,6 @@ def format_report(report: RaceReport, use_colour: bool = True) -> str:
         lines.append(f"  {label}  [{rw_col}]  {tid_str}")
 
         if acc.stack:
-            # Show the last 3 meaningful frames
             frames = [f.rstrip() for f in acc.stack if f.strip()]
             for frame in frames[-3:]:
                 for sub in frame.splitlines():
@@ -84,7 +82,7 @@ def format_summary(log: RaceLog, use_colour: bool = True) -> str:
     if not reports:
         lines.append(_colour(sep, _BOLD, use_colour))
         lines.append(
-            _colour("  pyft: NO DATA RACES DETECTED  ✓", _BOLD, use_colour)
+            _colour("  pyft: NO DATA RACES DETECTED ", _BOLD, use_colour)
         )
         lines.append(_colour(sep, _BOLD, use_colour))
         return "\n".join(lines)
@@ -106,7 +104,7 @@ def format_summary(log: RaceLog, use_colour: bool = True) -> str:
 
 
 def print_summary(
-    log: RaceLog, file=None, use_colour: bool | None = None
+    log: RaceLog, file: IO[str] | None = None, use_colour: bool | None = None
 ) -> None:
     if file is None:
         file = sys.stderr

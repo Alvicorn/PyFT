@@ -6,24 +6,24 @@ from .helpers import pyft_session, run_threads
 
 
 class Data:
-    def __init__(self):
+    def __init__(self) -> None:
         self.x = 0
 
 
 @pytest.mark.timeout(10)
 class TestReadWriteRace:
-    def test_reader_and_writer_concurrent(self):
+    def test_reader_and_writer_concurrent(self) -> None:
         """One thread reads, another writes — no sync → race."""
         with pyft_session() as (engine, track):
             obj = Data()
             shared = track(obj)
             read_values = []
 
-            def reader():
+            def reader() -> None:
                 for _ in range(20):
                     read_values.append(shared.x)
 
-            def writer():
+            def writer() -> None:
                 for _ in range(20):
                     shared.x += 1
 
@@ -35,7 +35,7 @@ class TestReadWriteRace:
             for r in reports:
                 assert r.access_a.attr == "x"
 
-    def test_race_kind_is_read_write_or_write_read(self):
+    def test_race_kind_is_read_write_or_write_read(self) -> None:
         """Mixed read/write race should be READ_WRITE or WRITE_READ."""
         with pyft_session() as (engine, track):
             obj = Data()
@@ -55,40 +55,40 @@ class TestReadWriteRace:
                     RaceKind.WRITE_WRITE,
                 }
 
-    def test_multiple_readers_one_writer(self):
+    def test_multiple_readers_one_writer(self) -> None:
         """Multiple readers + one writer without sync → races detected."""
         with pyft_session() as (engine, track):
             obj = Data()
             shared = track(obj)
 
-            def reader():
+            def reader() -> None:
                 for _ in range(10):
                     _ = shared.x
 
-            def writer():
+            def writer() -> None:
                 for _ in range(10):
                     shared.x = 99
 
             run_threads(reader, reader, writer)
             assert len(engine.race_log.all_reports()) >= 1
 
-    def test_one_reader_multiple_writers(self):
+    def test_one_reader_multiple_writers(self) -> None:
         with pyft_session() as (engine, track):
             obj = Data()
             shared = track(obj)
 
-            def reader():
+            def reader() -> None:
                 for _ in range(10):
                     _ = shared.x
 
-            def writer():
+            def writer() -> None:
                 for _ in range(10):
                     shared.x += 1
 
             run_threads(reader, writer, writer)
             assert len(engine.race_log.all_reports()) >= 1
 
-    def test_read_write_reports_have_distinct_tids(self):
+    def test_read_write_reports_have_distinct_tids(self) -> None:
         with pyft_session() as (engine, track):
             obj = Data()
             shared = track(obj)

@@ -23,18 +23,19 @@ import threading
 import unittest
 
 from pyft.detector.engine import Engine
+from pyft.detector.race_log import RaceLog, RaceReport
 
 
 class _RaceLogFacade:
     """Adapter: exposes .count() / .reports() over the real RaceLog."""
 
-    def __init__(self, log):
+    def __init__(self, log: RaceLog) -> None:
         self._log = log
 
     def count(self) -> int:
         return len(self._log)
 
-    def reports(self):
+    def reports(self) -> list[RaceReport]:
         return self._log.all_reports()
 
 
@@ -60,7 +61,7 @@ class VerifiedFTDetector:
     def __init__(self) -> None:
         self._engine = Engine()
         self.race_log = _RaceLogFacade(self._engine.race_log)
-        self._sentinels: dict = {}
+        self._sentinels: dict[tuple, object] = {}
         self._sentinels_mu = threading.Lock()
         self._orig_thread_start = threading.Thread.start
         self._install_thread_hooks()
@@ -91,25 +92,25 @@ class VerifiedFTDetector:
     def teardown(self) -> None:
         threading.Thread.start = self._orig_thread_start  # type: ignore[method-assign]
 
-    def _resolve(self, key: tuple):
+    def _resolve(self, key: tuple) -> tuple[object, str]:
         """Return (sentinel_obj, attr_str) for the given key tuple."""
         with self._sentinels_mu:
             if key not in self._sentinels:
                 self._sentinels[key] = object()
         return self._sentinels[key], str(key[-1])
 
-    def on_read(self, key) -> None:
+    def on_read(self, key: tuple) -> None:
         obj, attr = self._resolve(key)
         self._engine.read(obj, attr)
 
-    def on_write(self, key) -> None:
+    def on_write(self, key: tuple) -> None:
         obj, attr = self._resolve(key)
         self._engine.write(obj, attr)
 
-    def on_acquire(self, lock) -> None:
+    def on_acquire(self, lock: object) -> None:
         self._engine.lock_acquire(id(lock))
 
-    def on_release(self, lock) -> None:
+    def on_release(self, lock: object) -> None:
         self._engine.lock_release(id(lock))
 
 
@@ -118,16 +119,16 @@ def make_det() -> VerifiedFTDetector:
 
 
 class DRBTestCase(unittest.TestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.det = make_det()
 
-    def _key(self, obj, attr):
+    def _key(self, obj: object, attr: str) -> tuple:
         return ("attr", id(obj), attr)
 
-    def _list_key(self, lst, index):
+    def _list_key(self, lst: object, index: int) -> tuple:
         return ("list", id(lst), index)
 
-    def assertRace(self):
+    def assertRace(self) -> None:
         self.assertGreater(
             self.det.race_log.count(),
             0,
@@ -135,10 +136,10 @@ class DRBTestCase(unittest.TestCase):
             + "(Hint: check thread scheduling — barrier may need adjustment.)",
         )
 
-    def tearDown(self):
+    def tearDown(self) -> None:
         self.det.teardown()
 
-    def assertNoRace(self):
+    def assertNoRace(self) -> None:
         self.assertEqual(
             self.det.race_log.count(),
             0,
@@ -159,7 +160,7 @@ class TestDRB001_Yes_Increment(DRBTestCase):
     Two threads increment a shared counter without synchronisation.
     """
 
-    def test_unsync_increment(self):
+    def test_unsync_increment(self) -> None:
         class Counter:
             value = 0
 
@@ -167,7 +168,7 @@ class TestDRB001_Yes_Increment(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(c, "value")
 
-        def inc():
+        def inc() -> None:
             barrier.wait()
             self.det.on_read(key)
             self.det.on_write(key)
@@ -192,7 +193,7 @@ class TestDRB002_No_SyncIncrement(DRBTestCase):
     Corresponds to DataRaceBench DRB002-antidep1-orig-no.c
     """
 
-    def test_sync_increment(self):
+    def test_sync_increment(self) -> None:
         class Counter:
             value = 0
 
@@ -201,14 +202,14 @@ class TestDRB002_No_SyncIncrement(DRBTestCase):
         done1 = threading.Event()
         key = self._key(c, "value")
 
-        def inc1():
+        def inc1() -> None:
             self.det.on_acquire(lock)
             self.det.on_read(key)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def inc2():
+        def inc2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -236,7 +237,7 @@ class TestDRB003_Yes_ProducerConsumer(DRBTestCase):
     Corresponds to DRB: producer writes data, consumer reads, no sync.
     """
 
-    def test_unsync_producer_consumer(self):
+    def test_unsync_producer_consumer(self) -> None:
         class Shared:
             data = None
             ready = False
@@ -246,12 +247,12 @@ class TestDRB003_Yes_ProducerConsumer(DRBTestCase):
         data_key = self._key(s, "data")
         ready_key = self._key(s, "ready")
 
-        def producer():
+        def producer() -> None:
             barrier.wait()
             self.det.on_write(data_key)
             self.det.on_write(ready_key)
 
-        def consumer():
+        def consumer() -> None:
             barrier.wait()
             self.det.on_read(ready_key)
             self.det.on_read(data_key)
@@ -276,7 +277,7 @@ class TestDRB004_No_ProducerConsumer(DRBTestCase):
     Same as DRB003 but producer releases a lock that consumer acquires.
     """
 
-    def test_sync_producer_consumer(self):
+    def test_sync_producer_consumer(self) -> None:
         class Shared:
             data = None
 
@@ -285,12 +286,12 @@ class TestDRB004_No_ProducerConsumer(DRBTestCase):
         published = threading.Event()
         data_key = self._key(s, "data")
 
-        def producer():
+        def producer() -> None:
             self.det.on_write(data_key)
             self.det.on_release(lock)
             published.set()
 
-        def consumer():
+        def consumer() -> None:
             published.wait()
             self.det.on_acquire(lock)
             self.det.on_read(data_key)
@@ -317,7 +318,7 @@ class TestDRB005_No_IndependentFields(DRBTestCase):
     Should NOT be a race (different keys).
     """
 
-    def test_independent_fields(self):
+    def test_independent_fields(self) -> None:
         class Point:
             x = 0
             y = 0
@@ -327,11 +328,11 @@ class TestDRB005_No_IndependentFields(DRBTestCase):
         key_x = self._key(p, "x")
         key_y = self._key(p, "y")
 
-        def write_x():
+        def write_x() -> None:
             barrier.wait()
             self.det.on_write(key_x)
 
-        def write_y():
+        def write_y() -> None:
             barrier.wait()
             self.det.on_write(key_y)
 
@@ -357,7 +358,7 @@ class TestDRB006_Yes_LazyInit(DRBTestCase):
     Thread 2 does the same concurrently.  Race on the flag.
     """
 
-    def test_lazy_init_race(self):
+    def test_lazy_init_race(self) -> None:
         class Singleton:
             instance = None
 
@@ -365,7 +366,7 @@ class TestDRB006_Yes_LazyInit(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(s, "instance")
 
-        def maybe_init():
+        def maybe_init() -> None:
             barrier.wait()
             self.det.on_read(key)
             self.det.on_write(key)
@@ -392,7 +393,7 @@ class TestDRB007_No_ThreadLocalAccumulator(DRBTestCase):
     under a lock.  No race.
     """
 
-    def test_thread_local_accumulate(self):
+    def test_thread_local_accumulate(self) -> None:
         class Results:
             pass
 
@@ -404,12 +405,12 @@ class TestDRB007_No_ThreadLocalAccumulator(DRBTestCase):
         done_a = threading.Event()
         done_b = threading.Event()
 
-        def worker_a():
+        def worker_a() -> None:
             self.det.on_write(self._key(results, "slot_a"))
             self.det.on_release(handoff_a)
             done_a.set()
 
-        def worker_b():
+        def worker_b() -> None:
             self.det.on_write(self._key(results, "slot_b"))
             self.det.on_release(handoff_b)
             done_b.set()
@@ -445,17 +446,17 @@ class TestDRB008_Yes_MissingRelease(DRBTestCase):
     Thread 2 proceeds to write anyway (bug: acquire path skipped).
     """
 
-    def test_missing_release(self):
+    def test_missing_release(self) -> None:
         lock = object()
         done1 = threading.Event()
         key = ("global", "__test__", "shared")
 
-        def writer1():
+        def writer1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             done1.set()
 
-        def writer2():
+        def writer2() -> None:
             done1.wait()
             self.det.on_write(key)
 
@@ -476,7 +477,7 @@ class TestDRB008_Yes_MissingRelease(DRBTestCase):
 
 
 class TestDRB009_Yes_WriteWriteRace(DRBTestCase):
-    def test_write_write_race(self):
+    def test_write_write_race(self) -> None:
         class Flag:
             val = 0
 
@@ -484,7 +485,7 @@ class TestDRB009_Yes_WriteWriteRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(f, "val")
 
-        def writer():
+        def writer() -> None:
             barrier.wait()
             self.det.on_write(key)
 
@@ -504,7 +505,7 @@ class TestDRB009_Yes_WriteWriteRace(DRBTestCase):
 
 
 class TestDRB010_No_WriteWriteLock(DRBTestCase):
-    def test_write_write_locked(self):
+    def test_write_write_locked(self) -> None:
         class Flag:
             val = 0
 
@@ -513,13 +514,13 @@ class TestDRB010_No_WriteWriteLock(DRBTestCase):
         done1 = threading.Event()
         key = self._key(f, "val")
 
-        def writer1():
+        def writer1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def writer2():
+        def writer2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key)
@@ -541,7 +542,7 @@ class TestDRB010_No_WriteWriteLock(DRBTestCase):
 
 
 class TestDRB011_Yes_ReductionMissing(DRBTestCase):
-    def test_reduction_missing(self):
+    def test_reduction_missing(self) -> None:
         class Accum:
             val = 0
 
@@ -549,7 +550,7 @@ class TestDRB011_Yes_ReductionMissing(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(acc, "val")
 
-        def add():
+        def add() -> None:
             barrier.wait()
             self.det.on_read(key)
             self.det.on_write(key)
@@ -570,7 +571,7 @@ class TestDRB011_Yes_ReductionMissing(DRBTestCase):
 
 
 class TestDRB012_No_ReductionLock(DRBTestCase):
-    def test_reduction_locked(self):
+    def test_reduction_locked(self) -> None:
         class Accum:
             val = 0
 
@@ -579,14 +580,14 @@ class TestDRB012_No_ReductionLock(DRBTestCase):
         done1 = threading.Event()
         key = self._key(acc, "val")
 
-        def add1():
+        def add1() -> None:
             self.det.on_acquire(lock)
             self.det.on_read(key)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def add2():
+        def add2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -610,7 +611,7 @@ class TestDRB012_No_ReductionLock(DRBTestCase):
 
 
 class TestDRB013_Yes_MissingBarrier(DRBTestCase):
-    def test_missing_barrier(self):
+    def test_missing_barrier(self) -> None:
         class Shared:
             data = None
 
@@ -618,11 +619,11 @@ class TestDRB013_Yes_MissingBarrier(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(s, "data")
 
-        def writer():
+        def writer() -> None:
             barrier.wait()
             self.det.on_write(key)
 
-        def reader():
+        def reader() -> None:
             barrier.wait()
             self.det.on_read(key)
 
@@ -643,7 +644,7 @@ class TestDRB013_Yes_MissingBarrier(DRBTestCase):
 
 
 class TestDRB014_No_BarrierWithLock(DRBTestCase):
-    def test_barrier_with_lock(self):
+    def test_barrier_with_lock(self) -> None:
         class Shared:
             data = None
 
@@ -652,12 +653,12 @@ class TestDRB014_No_BarrierWithLock(DRBTestCase):
         published = threading.Event()
         key = self._key(s, "data")
 
-        def writer():
+        def writer() -> None:
             self.det.on_write(key)
             self.det.on_release(lock)
             published.set()
 
-        def reader():
+        def reader() -> None:
             published.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -678,12 +679,12 @@ class TestDRB014_No_BarrierWithLock(DRBTestCase):
 
 
 class TestDRB015_Yes_ArrayWriteSameIndex(DRBTestCase):
-    def test_array_write_same_index(self):
+    def test_array_write_same_index(self) -> None:
         lst = [0, 0]
         barrier = threading.Barrier(2)
         key0 = self._list_key(lst, 0)
 
-        def worker():
+        def worker() -> None:
             barrier.wait()
             self.det.on_write(key0)
 
@@ -703,17 +704,17 @@ class TestDRB015_Yes_ArrayWriteSameIndex(DRBTestCase):
 
 
 class TestDRB016_No_ArrayWriteDifferentIndex(DRBTestCase):
-    def test_array_write_different_index(self):
+    def test_array_write_different_index(self) -> None:
         lst = [0, 0]
         barrier = threading.Barrier(2)
         key0 = self._list_key(lst, 0)
         key1 = self._list_key(lst, 1)
 
-        def write0():
+        def write0() -> None:
             barrier.wait()
             self.det.on_write(key0)
 
-        def write1():
+        def write1() -> None:
             barrier.wait()
             self.det.on_write(key1)
 
@@ -733,7 +734,7 @@ class TestDRB016_No_ArrayWriteDifferentIndex(DRBTestCase):
 
 
 class TestDRB017_Yes_IndirectAliasing(DRBTestCase):
-    def test_indirect_aliasing(self):
+    def test_indirect_aliasing(self) -> None:
         class Box:
             value = 0
 
@@ -742,11 +743,11 @@ class TestDRB017_Yes_IndirectAliasing(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(b, "value")  # same key as alias.value
 
-        def writer1():
+        def writer1() -> None:
             barrier.wait()
             self.det.on_write(key)
 
-        def writer2():
+        def writer2() -> None:
             barrier.wait()
             # using alias
             self.det.on_write(self._key(alias, "value"))
@@ -767,7 +768,7 @@ class TestDRB017_Yes_IndirectAliasing(DRBTestCase):
 
 
 class TestDRB018_No_IndirectAliasingLock(DRBTestCase):
-    def test_indirect_aliasing_locked(self):
+    def test_indirect_aliasing_locked(self) -> None:
         class Box:
             value = 0
 
@@ -777,13 +778,13 @@ class TestDRB018_No_IndirectAliasingLock(DRBTestCase):
         done1 = threading.Event()
         key = self._key(b, "value")
 
-        def writer1():
+        def writer1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def writer2():
+        def writer2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(self._key(alias, "value"))
@@ -810,7 +811,7 @@ class TestDRB019_Yes_DoubleCheckedLocking(DRBTestCase):
     Both can enter the critical section concurrently.
     """
 
-    def test_double_checked_race(self):
+    def test_double_checked_race(self) -> None:
         class Init:
             done = False
             data = None
@@ -820,7 +821,7 @@ class TestDRB019_Yes_DoubleCheckedLocking(DRBTestCase):
         done_key = self._key(init, "done")
         data_key = self._key(init, "data")
 
-        def init_once():
+        def init_once() -> None:
             barrier.wait()
             # Check without proper lock
             self.det.on_read(done_key)
@@ -844,7 +845,7 @@ class TestDRB019_Yes_DoubleCheckedLocking(DRBTestCase):
 
 
 class TestDRB020_No_DoubleCheckedLocking(DRBTestCase):
-    def test_double_checked_locked(self):
+    def test_double_checked_locked(self) -> None:
         class Init:
             done = False
             data = None
@@ -855,7 +856,7 @@ class TestDRB020_No_DoubleCheckedLocking(DRBTestCase):
         done_key = self._key(init, "done")
         data_key = self._key(init, "data")
 
-        def init1():
+        def init1() -> None:
             self.det.on_read(done_key)
             self.det.on_acquire(lock)
             self.det.on_write(data_key)
@@ -864,7 +865,7 @@ class TestDRB020_No_DoubleCheckedLocking(DRBTestCase):
             self.det.on_release(done1)  # model event.set() as HB release
             done1.set()
 
-        def init2():
+        def init2() -> None:
             done1.wait()
             self.det.on_acquire(done1)  # model event.wait() as HB acquire
             self.det.on_read(done_key)
@@ -892,7 +893,7 @@ class TestDRB021_Yes_FlagAfterCreate(DRBTestCase):
     happens-before edge it's still a race.
     """
 
-    def test_flag_after_create(self):
+    def test_flag_after_create(self) -> None:
         class Shared:
             flag = False
 
@@ -900,11 +901,11 @@ class TestDRB021_Yes_FlagAfterCreate(DRBTestCase):
         started = threading.Event()
         key = self._key(sh, "flag")
 
-        def writer():
+        def writer() -> None:
             self.det.on_write(key)
             started.set()
 
-        def reader():
+        def reader() -> None:
             started.wait()
             self.det.on_read(key)
 
@@ -925,7 +926,7 @@ class TestDRB021_Yes_FlagAfterCreate(DRBTestCase):
 
 
 class TestDRB022_No_FlagWithHandoff(DRBTestCase):
-    def test_flag_with_handoff(self):
+    def test_flag_with_handoff(self) -> None:
         class Shared:
             flag = False
 
@@ -934,12 +935,12 @@ class TestDRB022_No_FlagWithHandoff(DRBTestCase):
         published = threading.Event()
         key = self._key(sh, "flag")
 
-        def writer():
+        def writer() -> None:
             self.det.on_write(key)
             self.det.on_release(lock)
             published.set()
 
-        def reader():
+        def reader() -> None:
             published.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -960,7 +961,7 @@ class TestDRB022_No_FlagWithHandoff(DRBTestCase):
 
 
 class TestDRB023_Yes_LoopCounterRace(DRBTestCase):
-    def test_loop_counter_race(self):
+    def test_loop_counter_race(self) -> None:
         class Counter:
             cnt = 0
 
@@ -968,7 +969,7 @@ class TestDRB023_Yes_LoopCounterRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(c, "cnt")
 
-        def loop():
+        def loop() -> None:
             barrier.wait()
             for _ in range(3):
                 self.det.on_read(key)
@@ -990,7 +991,7 @@ class TestDRB023_Yes_LoopCounterRace(DRBTestCase):
 
 
 class TestDRB024_No_LoopCounterLocked(DRBTestCase):
-    def test_loop_counter_locked(self):
+    def test_loop_counter_locked(self) -> None:
         class Counter:
             cnt = 0
 
@@ -999,7 +1000,7 @@ class TestDRB024_No_LoopCounterLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(c, "cnt")
 
-        def loop1():
+        def loop1() -> None:
             for _ in range(3):
                 self.det.on_acquire(lock)
                 self.det.on_read(key)
@@ -1007,7 +1008,7 @@ class TestDRB024_No_LoopCounterLocked(DRBTestCase):
                 self.det.on_release(lock)
             done1.set()
 
-        def loop2():
+        def loop2() -> None:
             done1.wait()
             for _ in range(3):
                 self.det.on_acquire(lock)
@@ -1031,7 +1032,7 @@ class TestDRB024_No_LoopCounterLocked(DRBTestCase):
 
 
 class TestDRB025_Yes_ReadWriteRaceSameField(DRBTestCase):
-    def test_read_write_same_field(self):
+    def test_read_write_same_field(self) -> None:
         class Box:
             val = 0
 
@@ -1039,11 +1040,11 @@ class TestDRB025_Yes_ReadWriteRaceSameField(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(b, "val")
 
-        def writer():
+        def writer() -> None:
             barrier.wait()
             self.det.on_write(key)
 
-        def reader():
+        def reader() -> None:
             barrier.wait()
             self.det.on_read(key)
 
@@ -1063,7 +1064,7 @@ class TestDRB025_Yes_ReadWriteRaceSameField(DRBTestCase):
 
 
 class TestDRB026_No_MultipleReaders(DRBTestCase):
-    def test_multiple_readers(self):
+    def test_multiple_readers(self) -> None:
         class Box:
             val = 42
 
@@ -1071,7 +1072,7 @@ class TestDRB026_No_MultipleReaders(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(b, "val")
 
-        def reader():
+        def reader() -> None:
             barrier.wait()
             self.det.on_read(key)
 
@@ -1091,7 +1092,7 @@ class TestDRB026_No_MultipleReaders(DRBTestCase):
 
 
 class TestDRB027_Yes_WriteAfterReadRace(DRBTestCase):
-    def test_write_after_read_race(self):
+    def test_write_after_read_race(self) -> None:
         class Box:
             val = 0
 
@@ -1099,11 +1100,11 @@ class TestDRB027_Yes_WriteAfterReadRace(DRBTestCase):
         key = self._key(b, "val")
         started = threading.Event()
 
-        def read_then_signal():
+        def read_then_signal() -> None:
             self.det.on_read(key)
             started.set()
 
-        def write_after_signal():
+        def write_after_signal() -> None:
             started.wait()
             self.det.on_write(key)
 
@@ -1124,7 +1125,7 @@ class TestDRB027_Yes_WriteAfterReadRace(DRBTestCase):
 
 
 class TestDRB028_No_WriteAfterReadLock(DRBTestCase):
-    def test_write_after_read_locked(self):
+    def test_write_after_read_locked(self) -> None:
         class Box:
             val = 0
 
@@ -1133,12 +1134,12 @@ class TestDRB028_No_WriteAfterReadLock(DRBTestCase):
         published = threading.Event()
         key = self._key(b, "val")
 
-        def reader():
+        def reader() -> None:
             self.det.on_read(key)
             self.det.on_release(lock)
             published.set()
 
-        def writer():
+        def writer() -> None:
             published.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key)
@@ -1164,20 +1165,20 @@ class TestDRB029_Yes_NestedLockReleaseMissing(DRBTestCase):
     Thread 2 acquires inner lock; it never sees HB from thread 1's release.
     """
 
-    def test_nested_lock_missing_release(self):
+    def test_nested_lock_missing_release(self) -> None:
         lock_outer = object()
         lock_inner = object()
         done1 = threading.Event()
         key = ("global", "shared")
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock_outer)
             self.det.on_acquire(lock_inner)
             self.det.on_write(key)
             self.det.on_release(lock_outer)  # BUG: inner not released
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock_inner)
             self.det.on_write(key)
@@ -1199,13 +1200,13 @@ class TestDRB029_Yes_NestedLockReleaseMissing(DRBTestCase):
 
 
 class TestDRB030_No_NestedLockCorrect(DRBTestCase):
-    def test_nested_lock_correct(self):
+    def test_nested_lock_correct(self) -> None:
         lock_outer = object()
         lock_inner = object()
         done1 = threading.Event()
         key = ("global", "shared")
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock_outer)
             self.det.on_acquire(lock_inner)
             self.det.on_write(key)
@@ -1213,7 +1214,7 @@ class TestDRB030_No_NestedLockCorrect(DRBTestCase):
             self.det.on_release(lock_outer)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock_outer)
             self.det.on_acquire(lock_inner)
@@ -1242,16 +1243,16 @@ class TestDRB031_Yes_ListSliceAliasing(DRBTestCase):
     slice views (simulated by same index). Race.
     """
 
-    def test_list_slice_alias_race(self):
+    def test_list_slice_alias_race(self) -> None:
         lst = [0, 0]
         key0 = self._list_key(lst, 0)
         barrier = threading.Barrier(2)
 
-        def worker_a():
+        def worker_a() -> None:
             barrier.wait()
             self.det.on_write(key0)
 
-        def worker_b():
+        def worker_b() -> None:
             barrier.wait()
             # another reference to same element
             self.det.on_write(self._list_key(lst, 0))
@@ -1272,19 +1273,19 @@ class TestDRB031_Yes_ListSliceAliasing(DRBTestCase):
 
 
 class TestDRB032_No_ListElementLocked(DRBTestCase):
-    def test_list_element_locked(self):
+    def test_list_element_locked(self) -> None:
         lst = [0, 0]
         lock = object()
         done1 = threading.Event()
         key0 = self._list_key(lst, 0)
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key0)
             self.det.on_release(lock)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key0)
@@ -1306,7 +1307,7 @@ class TestDRB032_No_ListElementLocked(DRBTestCase):
 
 
 class TestDRB033_Yes_AliasedFieldWrites(DRBTestCase):
-    def test_aliased_field_writes(self):
+    def test_aliased_field_writes(self) -> None:
         class Rec:
             a = 0
             b = 0
@@ -1318,11 +1319,11 @@ class TestDRB033_Yes_AliasedFieldWrites(DRBTestCase):
         # Thread 1 writes to r.a, Thread 2 also writes to the same field via alias
         alias = r
 
-        def write_a():
+        def write_a() -> None:
             barrier.wait()
             self.det.on_write(key_a)
 
-        def write_alias_a():
+        def write_alias_a() -> None:
             barrier.wait()
             self.det.on_write(self._key(alias, "a"))
 
@@ -1342,7 +1343,7 @@ class TestDRB033_Yes_AliasedFieldWrites(DRBTestCase):
 
 
 class TestDRB034_No_LockedAliasedFields(DRBTestCase):
-    def test_locked_aliased_fields(self):
+    def test_locked_aliased_fields(self) -> None:
         class Rec:
             a = 0
             b = 0
@@ -1352,13 +1353,13 @@ class TestDRB034_No_LockedAliasedFields(DRBTestCase):
         done1 = threading.Event()
         key_a = self._key(r, "a")
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key_a)
             self.det.on_release(lock)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             alias = r
             self.det.on_acquire(lock)
@@ -1381,7 +1382,7 @@ class TestDRB034_No_LockedAliasedFields(DRBTestCase):
 
 
 class TestDRB035_Yes_LoopVarRace(DRBTestCase):
-    def test_loop_var_race(self):
+    def test_loop_var_race(self) -> None:
         class Acc:
             val = 0
 
@@ -1389,7 +1390,7 @@ class TestDRB035_Yes_LoopVarRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(a, "val")
 
-        def updater():
+        def updater() -> None:
             barrier.wait()
             for _ in range(5):
                 self.det.on_read(key)
@@ -1411,7 +1412,7 @@ class TestDRB035_Yes_LoopVarRace(DRBTestCase):
 
 
 class TestDRB036_No_LoopVarLocked(DRBTestCase):
-    def test_loop_var_locked(self):
+    def test_loop_var_locked(self) -> None:
         class Acc:
             val = 0
 
@@ -1420,7 +1421,7 @@ class TestDRB036_No_LoopVarLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(a, "val")
 
-        def updater1():
+        def updater1() -> None:
             for _ in range(3):
                 self.det.on_acquire(lock)
                 self.det.on_read(key)
@@ -1428,7 +1429,7 @@ class TestDRB036_No_LoopVarLocked(DRBTestCase):
                 self.det.on_release(lock)
             done1.set()
 
-        def updater2():
+        def updater2() -> None:
             done1.wait()
             for _ in range(3):
                 self.det.on_acquire(lock)
@@ -1452,7 +1453,7 @@ class TestDRB036_No_LoopVarLocked(DRBTestCase):
 
 
 class TestDRB037_Yes_InitCheckMissingLock(DRBTestCase):
-    def test_init_check_missing_lock(self):
+    def test_init_check_missing_lock(self) -> None:
         class Data:
             ptr = None
 
@@ -1461,7 +1462,7 @@ class TestDRB037_Yes_InitCheckMissingLock(DRBTestCase):
         key_ptr = self._key(d, "ptr")
         key_val = ("global", "val")
 
-        def init():
+        def init() -> None:
             barrier.wait()
             self.det.on_read(key_ptr)
             self.det.on_write(key_val)  # allocate
@@ -1483,7 +1484,7 @@ class TestDRB037_Yes_InitCheckMissingLock(DRBTestCase):
 
 
 class TestDRB038_No_LazyInitLocked(DRBTestCase):
-    def test_lazy_init_locked(self):
+    def test_lazy_init_locked(self) -> None:
         class Data:
             ptr = None
 
@@ -1493,7 +1494,7 @@ class TestDRB038_No_LazyInitLocked(DRBTestCase):
         key_ptr = self._key(d, "ptr")
         key_val = ("global", "val")
 
-        def init1():
+        def init1() -> None:
             self.det.on_read(key_ptr)
             self.det.on_acquire(lock)
             self.det.on_write(key_val)
@@ -1502,7 +1503,7 @@ class TestDRB038_No_LazyInitLocked(DRBTestCase):
             self.det.on_release(done1)  # model event.set() as HB release
             done1.set()
 
-        def init2():
+        def init2() -> None:
             done1.wait()
             self.det.on_acquire(done1)  # model event.wait() as HB acquire
             # HB established via event handoff: no race on key_ptr
@@ -1524,16 +1525,16 @@ class TestDRB038_No_LazyInitLocked(DRBTestCase):
 
 
 class TestDRB039_Yes_AdjacentIndexRace(DRBTestCase):
-    def test_adjacent_index_race(self):
+    def test_adjacent_index_race(self) -> None:
         arr = [0, 0, 0]
         barrier = threading.Barrier(2)
         key1 = self._list_key(arr, 1)
 
-        def worker_a():
+        def worker_a() -> None:
             barrier.wait()
             self.det.on_write(key1)  # writes index 1
 
-        def worker_b():
+        def worker_b() -> None:
             barrier.wait()
             self.det.on_write(self._list_key(arr, 1))  # same index -> race
 
@@ -1553,17 +1554,17 @@ class TestDRB039_Yes_AdjacentIndexRace(DRBTestCase):
 
 
 class TestDRB040_No_AdjacentIndexSafe(DRBTestCase):
-    def test_adjacent_index_safe(self):
+    def test_adjacent_index_safe(self) -> None:
         arr = [0, 0, 0]
         barrier = threading.Barrier(2)
         key0 = self._list_key(arr, 0)
         key2 = self._list_key(arr, 2)
 
-        def worker_a():
+        def worker_a() -> None:
             barrier.wait()
             self.det.on_write(key0)
 
-        def worker_b():
+        def worker_b() -> None:
             barrier.wait()
             self.det.on_write(key2)
 
@@ -1583,7 +1584,7 @@ class TestDRB040_No_AdjacentIndexSafe(DRBTestCase):
 
 
 class TestDRB041_Yes_FlagSpinRace(DRBTestCase):
-    def test_flag_spin_race(self):
+    def test_flag_spin_race(self) -> None:
         class Flag:
             ready = False
 
@@ -1591,11 +1592,11 @@ class TestDRB041_Yes_FlagSpinRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(f, "ready")
 
-        def setter():
+        def setter() -> None:
             barrier.wait()
             self.det.on_write(key)
 
-        def spin_reader():
+        def spin_reader() -> None:
             barrier.wait()
             # read in a loop (simulate spin)
             for _ in range(3):
@@ -1617,7 +1618,7 @@ class TestDRB041_Yes_FlagSpinRace(DRBTestCase):
 
 
 class TestDRB042_No_FlagHandoffSpin(DRBTestCase):
-    def test_flag_handoff_spin(self):
+    def test_flag_handoff_spin(self) -> None:
         class Flag:
             ready = False
 
@@ -1626,12 +1627,12 @@ class TestDRB042_No_FlagHandoffSpin(DRBTestCase):
         published = threading.Event()
         key = self._key(f, "ready")
 
-        def setter():
+        def setter() -> None:
             self.det.on_write(key)  # set ready
             self.det.on_release(lock)  # HB to acquirer
             published.set()
 
-        def reader():
+        def reader() -> None:
             published.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -1653,7 +1654,7 @@ class TestDRB042_No_FlagHandoffSpin(DRBTestCase):
 
 
 class TestDRB043_Yes_IndirectThroughStruct(DRBTestCase):
-    def test_indirect_through_struct(self):
+    def test_indirect_through_struct(self) -> None:
         class Inner:
             val = 0
 
@@ -1666,7 +1667,7 @@ class TestDRB043_Yes_IndirectThroughStruct(DRBTestCase):
         barrier = threading.Barrier(2)
         inner_key = self._key(inner, "val")
 
-        def worker():
+        def worker() -> None:
             barrier.wait()
             self.det.on_write(
                 inner_key
@@ -1688,7 +1689,7 @@ class TestDRB043_Yes_IndirectThroughStruct(DRBTestCase):
 
 
 class TestDRB044_No_IndirectThroughStructLocked(DRBTestCase):
-    def test_indirect_through_struct_locked(self):
+    def test_indirect_through_struct_locked(self) -> None:
         class Inner:
             val = 0
 
@@ -1702,13 +1703,13 @@ class TestDRB044_No_IndirectThroughStructLocked(DRBTestCase):
         done1 = threading.Event()
         inner_key = self._key(inner, "val")
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(inner_key)
             self.det.on_release(lock)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(self._key(o.ptr, "val"))
@@ -1730,12 +1731,12 @@ class TestDRB044_No_IndirectThroughStructLocked(DRBTestCase):
 
 
 class TestDRB045_Yes_ArrayReductionNoSync(DRBTestCase):
-    def test_array_reduction_no_sync(self):
+    def test_array_reduction_no_sync(self) -> None:
         arr = [0]
         barrier = threading.Barrier(2)
         key = self._list_key(arr, 0)
 
-        def add():
+        def add() -> None:
             barrier.wait()
             self.det.on_read(key)
             self.det.on_write(key)
@@ -1756,20 +1757,20 @@ class TestDRB045_Yes_ArrayReductionNoSync(DRBTestCase):
 
 
 class TestDRB046_No_ArrayReductionLocked(DRBTestCase):
-    def test_array_reduction_locked(self):
+    def test_array_reduction_locked(self) -> None:
         arr = [0]
         lock = object()
         done1 = threading.Event()
         key = self._list_key(arr, 0)
 
-        def add1():
+        def add1() -> None:
             self.det.on_acquire(lock)
             self.det.on_read(key)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def add2():
+        def add2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -1792,15 +1793,14 @@ class TestDRB046_No_ArrayReductionLocked(DRBTestCase):
 
 
 class TestDRB047_Yes_FunctionParamAlias(DRBTestCase):
-    def test_function_param_alias(self):
+    def test_function_param_alias(self) -> None:
         class Glob:
             x = 0
 
         g = Glob()
         barrier = threading.Barrier(2)
-        key = self._key(g, "x")
 
-        def write_via_ref(obj):
+        def write_via_ref(obj: object) -> None:
             barrier.wait()
             self.det.on_write(self._key(obj, "x"))
 
@@ -1820,25 +1820,24 @@ class TestDRB047_Yes_FunctionParamAlias(DRBTestCase):
 
 
 class TestDRB048_No_FunctionParamLocked(DRBTestCase):
-    def test_function_param_locked(self):
+    def test_function_param_locked(self) -> None:
         class Glob:
             x = 0
 
         g = Glob()
         lock = object()
         done1 = threading.Event()
-        key = self._key(g, "x")
 
-        def write(obj):
+        def write(obj: object) -> None:
             self.det.on_acquire(lock)
             self.det.on_write(self._key(obj, "x"))
             self.det.on_release(lock)
 
-        def worker1():
+        def worker1() -> None:
             write(g)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             write(g)
 
@@ -1858,7 +1857,7 @@ class TestDRB048_No_FunctionParamLocked(DRBTestCase):
 
 
 class TestDRB049_Yes_ListOfStructsRace(DRBTestCase):
-    def test_list_of_structs_race(self):
+    def test_list_of_structs_race(self) -> None:
         class Elem:
             val = 0
 
@@ -1866,7 +1865,7 @@ class TestDRB049_Yes_ListOfStructsRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(items[0], "val")
 
-        def worker():
+        def worker() -> None:
             barrier.wait()
             self.det.on_write(key)  # both write to same element[0].val
 
@@ -1886,9 +1885,9 @@ class TestDRB049_Yes_ListOfStructsRace(DRBTestCase):
 
 
 class TestDRB050_No_ListOfStructsLocked(DRBTestCase):
-    def test_list_of_structs_locked(self):
+    def test_list_of_structs_locked(self) -> None:
         class Elem:
-            def __init__(self):
+            def __init__(self) -> None:
                 self.val = 0
                 self.lock = object()
 
@@ -1897,13 +1896,13 @@ class TestDRB050_No_ListOfStructsLocked(DRBTestCase):
         key = self._key(items[0], "val")
         lock0 = items[0].lock
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock0)
             self.det.on_write(key)
             self.det.on_release(lock0)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock0)
             self.det.on_write(key)
@@ -1925,7 +1924,7 @@ class TestDRB050_No_ListOfStructsLocked(DRBTestCase):
 
 
 class TestDRB051_Yes_TwoFieldsRace(DRBTestCase):
-    def test_two_fields_race(self):
+    def test_two_fields_race(self) -> None:
         class S:
             x = 0
             y = 0
@@ -1935,12 +1934,12 @@ class TestDRB051_Yes_TwoFieldsRace(DRBTestCase):
         key_x = self._key(s, "x")
         key_y = self._key(s, "y")
 
-        def writer():
+        def writer() -> None:
             barrier.wait()
             self.det.on_write(key_x)
             self.det.on_write(key_y)
 
-        def reader():
+        def reader() -> None:
             barrier.wait()
             self.det.on_read(key_x)
             self.det.on_read(key_y)
@@ -1962,7 +1961,7 @@ class TestDRB051_Yes_TwoFieldsRace(DRBTestCase):
 
 
 class TestDRB052_No_TwoFieldsLocked(DRBTestCase):
-    def test_two_fields_locked(self):
+    def test_two_fields_locked(self) -> None:
         class S:
             x = 0
             y = 0
@@ -1973,14 +1972,14 @@ class TestDRB052_No_TwoFieldsLocked(DRBTestCase):
         key_x = self._key(s, "x")
         key_y = self._key(s, "y")
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key_x)
             self.det.on_write(key_y)
             self.det.on_release(lock)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key_x)
@@ -2003,17 +2002,16 @@ class TestDRB052_No_TwoFieldsLocked(DRBTestCase):
 
 
 class TestDRB053_Yes_CondVarNoMutex(DRBTestCase):
-    def test_condvar_no_mutex(self):
-        flag = object()  # treat as shared condition variable
+    def test_condvar_no_mutex(self) -> None:
         data_key = ("global", "data")
         started = threading.Event()
 
-        def producer():
+        def producer() -> None:
             self.det.on_write(data_key)
             # Signal without lock (no release)
             started.set()
 
-        def consumer():
+        def consumer() -> None:
             started.wait()
             # Acquire missing: just read
             self.det.on_read(data_key)
@@ -2034,17 +2032,17 @@ class TestDRB053_Yes_CondVarNoMutex(DRBTestCase):
 
 
 class TestDRB054_No_CondVarCorrect(DRBTestCase):
-    def test_condvar_correct(self):
+    def test_condvar_correct(self) -> None:
         lock = object()
         data_key = ("global", "data")
         published = threading.Event()
 
-        def producer():
+        def producer() -> None:
             self.det.on_write(data_key)
             self.det.on_release(lock)  # signal with HB
             published.set()
 
-        def consumer():
+        def consumer() -> None:
             published.wait()
             self.det.on_acquire(lock)  # receive signal
             self.det.on_read(data_key)
@@ -2065,7 +2063,7 @@ class TestDRB054_No_CondVarCorrect(DRBTestCase):
 
 
 class TestDRB055_Yes_MultiWriterCounter(DRBTestCase):
-    def test_multi_writer_counter(self):
+    def test_multi_writer_counter(self) -> None:
         class Counter:
             val = 0
 
@@ -2074,7 +2072,7 @@ class TestDRB055_Yes_MultiWriterCounter(DRBTestCase):
         writers = 3
         barrier = threading.Barrier(writers)
 
-        def writer():
+        def writer() -> None:
             barrier.wait()
             self.det.on_read(key)
             self.det.on_write(key)
@@ -2094,7 +2092,7 @@ class TestDRB055_Yes_MultiWriterCounter(DRBTestCase):
 
 
 class TestDRB056_No_MultiWriterHandoff(DRBTestCase):
-    def test_multi_writer_handoff(self):
+    def test_multi_writer_handoff(self) -> None:
         class Counter:
             val = 0
 
@@ -2103,7 +2101,7 @@ class TestDRB056_No_MultiWriterHandoff(DRBTestCase):
         events = [threading.Event()]
         key = self._key(c, "val")
 
-        def writer(lock, done):
+        def writer(lock: object, done: threading.Event) -> None:
             self.det.on_acquire(lock)
             self.det.on_read(key)
             self.det.on_write(key)
@@ -2130,12 +2128,12 @@ class TestDRB056_No_MultiWriterHandoff(DRBTestCase):
 
 
 class TestDRB057_Yes_VectorElementRace(DRBTestCase):
-    def test_vector_element_race(self):
+    def test_vector_element_race(self) -> None:
         vector = [0.0, 0.0]
         barrier = threading.Barrier(2)
         key = self._list_key(vector, 0)
 
-        def write_first():
+        def write_first() -> None:
             barrier.wait()
             self.det.on_write(key)
 
@@ -2155,19 +2153,19 @@ class TestDRB057_Yes_VectorElementRace(DRBTestCase):
 
 
 class TestDRB058_No_VectorElementLocked(DRBTestCase):
-    def test_vector_element_locked(self):
+    def test_vector_element_locked(self) -> None:
         vector = [0.0, 0.0]
         lock = object()
         done1 = threading.Event()
         key = self._list_key(vector, 0)
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key)
@@ -2189,7 +2187,7 @@ class TestDRB058_No_VectorElementLocked(DRBTestCase):
 
 
 class TestDRB059_Yes_ReallocRace(DRBTestCase):
-    def test_realloc_race(self):
+    def test_realloc_race(self) -> None:
         class Holder:
             ptr = None
 
@@ -2197,7 +2195,7 @@ class TestDRB059_Yes_ReallocRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(h, "ptr")
 
-        def realloc():
+        def realloc() -> None:
             barrier.wait()
             self.det.on_write(key)  # realloc overwrites pointer
 
@@ -2217,7 +2215,7 @@ class TestDRB059_Yes_ReallocRace(DRBTestCase):
 
 
 class TestDRB060_No_ReallocLocked(DRBTestCase):
-    def test_realloc_locked(self):
+    def test_realloc_locked(self) -> None:
         class Holder:
             ptr = None
 
@@ -2226,13 +2224,13 @@ class TestDRB060_No_ReallocLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(h, "ptr")
 
-        def realloc1():
+        def realloc1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def realloc2():
+        def realloc2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key)
@@ -2254,9 +2252,9 @@ class TestDRB060_No_ReallocLocked(DRBTestCase):
 
 
 class TestDRB061_Yes_LinkedListNodeRace(DRBTestCase):
-    def test_linked_list_node_race(self):
+    def test_linked_list_node_race(self) -> None:
         class Node:
-            def __init__(self, val):
+            def __init__(self, val: int) -> None:
                 self.val = val
                 self.next = None
 
@@ -2264,7 +2262,7 @@ class TestDRB061_Yes_LinkedListNodeRace(DRBTestCase):
         barrier = threading.Barrier(2)
         val_key = self._key(head, "val")
 
-        def writer():
+        def writer() -> None:
             barrier.wait()
             self.det.on_write(val_key)  # both modify head.val
 
@@ -2284,9 +2282,9 @@ class TestDRB061_Yes_LinkedListNodeRace(DRBTestCase):
 
 
 class TestDRB062_No_LinkedListNodeLocked(DRBTestCase):
-    def test_linked_list_node_locked(self):
+    def test_linked_list_node_locked(self) -> None:
         class Node:
-            def __init__(self, val):
+            def __init__(self, val: int) -> None:
                 self.val = val
                 self.next = None
                 self.lock = object()
@@ -2296,13 +2294,13 @@ class TestDRB062_No_LinkedListNodeLocked(DRBTestCase):
         val_key = self._key(head, "val")
         lock = head.lock
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(val_key)
             self.det.on_release(lock)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(val_key)
@@ -2324,7 +2322,7 @@ class TestDRB062_No_LinkedListNodeLocked(DRBTestCase):
 
 
 class TestDRB063_Yes_GetterFunctionRace(DRBTestCase):
-    def test_getter_function_race(self):
+    def test_getter_function_race(self) -> None:
         class Container:
             value = 42
 
@@ -2332,11 +2330,11 @@ class TestDRB063_Yes_GetterFunctionRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(obj, "value")
 
-        def getter():
+        def getter() -> None:
             barrier.wait()
             self.det.on_read(key)
 
-        def setter():
+        def setter() -> None:
             barrier.wait()
             self.det.on_write(key)
 
@@ -2356,7 +2354,7 @@ class TestDRB063_Yes_GetterFunctionRace(DRBTestCase):
 
 
 class TestDRB064_No_GetterSetterLocked(DRBTestCase):
-    def test_getter_setter_locked(self):
+    def test_getter_setter_locked(self) -> None:
         class Container:
             value = 42
 
@@ -2365,13 +2363,13 @@ class TestDRB064_No_GetterSetterLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(obj, "value")
 
-        def setter():
+        def setter() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def getter():
+        def getter() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -2393,7 +2391,7 @@ class TestDRB064_No_GetterSetterLocked(DRBTestCase):
 
 
 class TestDRB065_Yes_LoopIndexShared(DRBTestCase):
-    def test_loop_index_shared(self):
+    def test_loop_index_shared(self) -> None:
         class LoopCtx:
             i = 0
 
@@ -2401,7 +2399,7 @@ class TestDRB065_Yes_LoopIndexShared(DRBTestCase):
         barrier = threading.Barrier(2)
         key_i = self._key(ctx, "i")
 
-        def work():
+        def work() -> None:
             barrier.wait()
             self.det.on_read(key_i)  # read i
             self.det.on_write(key_i)  # i++
@@ -2422,7 +2420,7 @@ class TestDRB065_Yes_LoopIndexShared(DRBTestCase):
 
 
 class TestDRB066_No_ThreadPrivateIndex(DRBTestCase):
-    def test_thread_private_index(self):
+    def test_thread_private_index(self) -> None:
         # each thread writes to its own key
         class TData:
             pass
@@ -2433,7 +2431,7 @@ class TestDRB066_No_ThreadPrivateIndex(DRBTestCase):
         key1 = self._key(d1, "i")
         key2 = self._key(d2, "i")
 
-        def worker(obj, key):
+        def worker(obj: object, key: tuple) -> None:
             barrier.wait()
             self.det.on_write(key)
 
@@ -2454,7 +2452,7 @@ class TestDRB066_No_ThreadPrivateIndex(DRBTestCase):
 
 
 class TestDRB067_Yes_ArrayOfStructSameMemberRace(DRBTestCase):
-    def test_aos_same_member_race(self):
+    def test_aos_same_member_race(self) -> None:
         class Particle:
             x = 0.0
 
@@ -2462,7 +2460,7 @@ class TestDRB067_Yes_ArrayOfStructSameMemberRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(particles[0], "x")  # both write to particles[0].x
 
-        def worker():
+        def worker() -> None:
             barrier.wait()
             self.det.on_write(key)
 
@@ -2482,7 +2480,7 @@ class TestDRB067_Yes_ArrayOfStructSameMemberRace(DRBTestCase):
 
 
 class TestDRB068_No_ArrayOfStructLocked(DRBTestCase):
-    def test_aos_locked(self):
+    def test_aos_locked(self) -> None:
         class Particle:
             x = 0.0
 
@@ -2491,13 +2489,13 @@ class TestDRB068_No_ArrayOfStructLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(particles[0], "x")
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key)
@@ -2519,7 +2517,7 @@ class TestDRB068_No_ArrayOfStructLocked(DRBTestCase):
 
 
 class TestDRB069_Yes_StringAppendRace(DRBTestCase):
-    def test_string_append_race(self):
+    def test_string_append_race(self) -> None:
         class Buffer:
             data = ""
 
@@ -2527,7 +2525,7 @@ class TestDRB069_Yes_StringAppendRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(buf, "data")
 
-        def append():
+        def append() -> None:
             barrier.wait()
             self.det.on_read(key)
             self.det.on_write(key)
@@ -2548,7 +2546,7 @@ class TestDRB069_Yes_StringAppendRace(DRBTestCase):
 
 
 class TestDRB070_No_StringAppendLocked(DRBTestCase):
-    def test_string_append_locked(self):
+    def test_string_append_locked(self) -> None:
         class Buffer:
             data = ""
 
@@ -2557,14 +2555,14 @@ class TestDRB070_No_StringAppendLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(buf, "data")
 
-        def append1():
+        def append1() -> None:
             self.det.on_acquire(lock)
             self.det.on_read(key)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def append2():
+        def append2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -2587,7 +2585,7 @@ class TestDRB070_No_StringAppendLocked(DRBTestCase):
 
 
 class TestDRB071_Yes_SingletonRace(DRBTestCase):
-    def test_singleton_race(self):
+    def test_singleton_race(self) -> None:
         class Singleton:
             instance = None
 
@@ -2595,7 +2593,7 @@ class TestDRB071_Yes_SingletonRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(s, "instance")
 
-        def get():
+        def get() -> None:
             barrier.wait()
             self.det.on_read(key)
             self.det.on_write(key)
@@ -2616,7 +2614,7 @@ class TestDRB071_Yes_SingletonRace(DRBTestCase):
 
 
 class TestDRB072_No_SingletonDCL(DRBTestCase):
-    def test_singleton_dcl(self):
+    def test_singleton_dcl(self) -> None:
         class Singleton:
             instance = None
 
@@ -2625,7 +2623,7 @@ class TestDRB072_No_SingletonDCL(DRBTestCase):
         done1 = threading.Event()
         key = self._key(s, "instance")
 
-        def get1():
+        def get1() -> None:
             self.det.on_read(key)
             self.det.on_acquire(lock)
             self.det.on_write(key)
@@ -2633,7 +2631,7 @@ class TestDRB072_No_SingletonDCL(DRBTestCase):
             self.det.on_release(done1)  # model event.set() as HB release
             done1.set()
 
-        def get2():
+        def get2() -> None:
             done1.wait()
             self.det.on_acquire(done1)  # model event.wait() as HB acquire
             self.det.on_read(key)  # HB via event handoff: no race
@@ -2654,12 +2652,12 @@ class TestDRB072_No_SingletonDCL(DRBTestCase):
 
 
 class TestDRB073_Yes_SimdReductionRace(DRBTestCase):
-    def test_simd_reduction_race(self):
+    def test_simd_reduction_race(self) -> None:
         arr = [0.0] * 8
         barrier = threading.Barrier(2)
         key0 = self._list_key(arr, 0)
 
-        def partial_reduce():
+        def partial_reduce() -> None:
             barrier.wait()
             self.det.on_read(key0)
             self.det.on_write(key0)
@@ -2680,20 +2678,20 @@ class TestDRB073_Yes_SimdReductionRace(DRBTestCase):
 
 
 class TestDRB074_No_SimdReductionLocked(DRBTestCase):
-    def test_simd_reduction_locked(self):
+    def test_simd_reduction_locked(self) -> None:
         arr = [0.0] * 8
         lock = object()
         done1 = threading.Event()
         key0 = self._list_key(arr, 0)
 
-        def partial_reduce1():
+        def partial_reduce1() -> None:
             self.det.on_acquire(lock)
             self.det.on_read(key0)
             self.det.on_write(key0)
             self.det.on_release(lock)
             done1.set()
 
-        def partial_reduce2():
+        def partial_reduce2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key0)
@@ -2716,13 +2714,13 @@ class TestDRB074_No_SimdReductionLocked(DRBTestCase):
 
 
 class TestDRB075_Yes_AliasedLocal(DRBTestCase):
-    def test_aliased_local(self):
+    def test_aliased_local(self) -> None:
         var = [0]
         # simulate passing int* to both threads
         barrier = threading.Barrier(2)
         key = self._list_key(var, 0)
 
-        def work():
+        def work() -> None:
             barrier.wait()
             self.det.on_write(key)
 
@@ -2742,13 +2740,11 @@ class TestDRB075_Yes_AliasedLocal(DRBTestCase):
 
 
 class TestDRB076_No_ThreadLocalCopy(DRBTestCase):
-    def test_thread_local_copy(self):
+    def test_thread_local_copy(self) -> None:
         barrier = threading.Barrier(2)
-        key1 = ("local", id(threading.current_thread()), "val")
-        key2 = ("local", id(threading.current_thread()), "val")
 
         # each thread has its own key; we create objects on the fly
-        def worker():
+        def worker() -> None:
             private_obj = object()
             barrier.wait()
             self.det.on_write(self._key(private_obj, "val"))
@@ -2769,7 +2765,7 @@ class TestDRB076_No_ThreadLocalCopy(DRBTestCase):
 
 
 class TestDRB077_Yes_FileWriteRace(DRBTestCase):
-    def test_file_write_race(self):
+    def test_file_write_race(self) -> None:
         class File:
             fd = object()
 
@@ -2777,7 +2773,7 @@ class TestDRB077_Yes_FileWriteRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(f, "fd")
 
-        def write():
+        def write() -> None:
             barrier.wait()
             self.det.on_write(key)
 
@@ -2797,7 +2793,7 @@ class TestDRB077_Yes_FileWriteRace(DRBTestCase):
 
 
 class TestDRB078_No_FileWriteLocked(DRBTestCase):
-    def test_file_write_locked(self):
+    def test_file_write_locked(self) -> None:
         class File:
             fd = object()
 
@@ -2806,13 +2802,13 @@ class TestDRB078_No_FileWriteLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(f, "fd")
 
-        def write1():
+        def write1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def write2():
+        def write2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key)
@@ -2834,16 +2830,15 @@ class TestDRB078_No_FileWriteLocked(DRBTestCase):
 
 
 class TestDRB079_Yes_PointerSwapRace(DRBTestCase):
-    def test_pointer_swap_race(self):
+    def test_pointer_swap_race(self) -> None:
         class Node:
             next = None
 
         n1 = Node()
-        n2 = Node()
         barrier = threading.Barrier(2)
         key = self._key(n1, "next")
 
-        def swapper():
+        def swapper() -> None:
             barrier.wait()
             # read then write next pointer
             self.det.on_read(key)
@@ -2865,7 +2860,7 @@ class TestDRB079_Yes_PointerSwapRace(DRBTestCase):
 
 
 class TestDRB080_No_PointerSwapLocked(DRBTestCase):
-    def test_pointer_swap_locked(self):
+    def test_pointer_swap_locked(self) -> None:
         class Node:
             next = None
 
@@ -2874,14 +2869,14 @@ class TestDRB080_No_PointerSwapLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(n1, "next")
 
-        def swapper1():
+        def swapper1() -> None:
             self.det.on_acquire(lock)
             self.det.on_read(key)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def swapper2():
+        def swapper2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -2904,7 +2899,7 @@ class TestDRB080_No_PointerSwapLocked(DRBTestCase):
 
 
 class TestDRB081_Yes_HashTableRace(DRBTestCase):
-    def test_hash_table_race(self):
+    def test_hash_table_race(self) -> None:
         class Entry:
             key = 0
             value = None
@@ -2913,7 +2908,7 @@ class TestDRB081_Yes_HashTableRace(DRBTestCase):
         barrier = threading.Barrier(2)
         val_key = self._key(e, "value")
 
-        def rehash():
+        def rehash() -> None:
             barrier.wait()
             self.det.on_write(val_key)
 
@@ -2933,7 +2928,7 @@ class TestDRB081_Yes_HashTableRace(DRBTestCase):
 
 
 class TestDRB082_No_HashTableLocked(DRBTestCase):
-    def test_hash_table_locked(self):
+    def test_hash_table_locked(self) -> None:
         class Entry:
             key = 0
             value = None
@@ -2943,13 +2938,13 @@ class TestDRB082_No_HashTableLocked(DRBTestCase):
         done1 = threading.Event()
         val_key = self._key(e, "value")
 
-        def writer1():
+        def writer1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(val_key)
             self.det.on_release(lock)
             done1.set()
 
-        def writer2():
+        def writer2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(val_key)
@@ -2971,7 +2966,7 @@ class TestDRB082_No_HashTableLocked(DRBTestCase):
 
 
 class TestDRB083_Yes_GlobalFlagLoopRace(DRBTestCase):
-    def test_global_flag_loop_race(self):
+    def test_global_flag_loop_race(self) -> None:
         class Control:
             stop = False
 
@@ -2979,12 +2974,12 @@ class TestDRB083_Yes_GlobalFlagLoopRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(ctrl, "stop")
 
-        def looper():
+        def looper() -> None:
             barrier.wait()
             for _ in range(3):
                 self.det.on_read(key)  # checking stop
 
-        def stopper():
+        def stopper() -> None:
             barrier.wait()
             self.det.on_write(key)  # set stop
 
@@ -3004,7 +2999,7 @@ class TestDRB083_Yes_GlobalFlagLoopRace(DRBTestCase):
 
 
 class TestDRB084_No_GlobalFlagLocked(DRBTestCase):
-    def test_global_flag_locked(self):
+    def test_global_flag_locked(self) -> None:
         class Control:
             stop = False
 
@@ -3013,13 +3008,13 @@ class TestDRB084_No_GlobalFlagLocked(DRBTestCase):
         published = threading.Event()
         key = self._key(ctrl, "stop")
 
-        def stopper():
+        def stopper() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             published.set()
 
-        def looper():
+        def looper() -> None:
             published.wait()
             # just read after acquire to establish HB
             self.det.on_acquire(lock)
@@ -3043,7 +3038,7 @@ class TestDRB084_No_GlobalFlagLocked(DRBTestCase):
 
 
 class TestDRB085_Yes_TaskMemberRace(DRBTestCase):
-    def test_task_member_race(self):
+    def test_task_member_race(self) -> None:
         class Shared:
             res = 0
 
@@ -3051,7 +3046,7 @@ class TestDRB085_Yes_TaskMemberRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(s, "res")
 
-        def task():
+        def task() -> None:
             barrier.wait()
             self.det.on_write(key)
 
@@ -3071,7 +3066,7 @@ class TestDRB085_Yes_TaskMemberRace(DRBTestCase):
 
 
 class TestDRB086_No_TaskMemberLocked(DRBTestCase):
-    def test_task_member_locked(self):
+    def test_task_member_locked(self) -> None:
         class Shared:
             res = 0
 
@@ -3080,13 +3075,13 @@ class TestDRB086_No_TaskMemberLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(s, "res")
 
-        def task1():
+        def task1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def task2():
+        def task2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key)
@@ -3108,12 +3103,12 @@ class TestDRB086_No_TaskMemberLocked(DRBTestCase):
 
 
 class TestDRB087_Yes_ParallelRegionListRace(DRBTestCase):
-    def test_parallel_region_list_race(self):
+    def test_parallel_region_list_race(self) -> None:
         lst = [0, 0, 0]
         barrier = threading.Barrier(2)
         key1 = self._list_key(lst, 1)
 
-        def worker():
+        def worker() -> None:
             barrier.wait()
             self.det.on_write(key1)
 
@@ -3133,19 +3128,19 @@ class TestDRB087_Yes_ParallelRegionListRace(DRBTestCase):
 
 
 class TestDRB088_No_ParallelRegionCritical(DRBTestCase):
-    def test_parallel_region_critical(self):
+    def test_parallel_region_critical(self) -> None:
         lst = [0, 0, 0]
         lock = object()
         done1 = threading.Event()
         key1 = self._list_key(lst, 1)
 
-        def worker1():
+        def worker1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key1)
             self.det.on_release(lock)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key1)
@@ -3167,7 +3162,7 @@ class TestDRB088_No_ParallelRegionCritical(DRBTestCase):
 
 
 class TestDRB089_Yes_WorkSharingLoopRace(DRBTestCase):
-    def test_work_sharing_race(self):
+    def test_work_sharing_race(self) -> None:
         class Shared:
             sum = 0
 
@@ -3175,7 +3170,7 @@ class TestDRB089_Yes_WorkSharingLoopRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(s, "sum")
 
-        def worker():
+        def worker() -> None:
             barrier.wait()
             self.det.on_read(key)
             self.det.on_write(key)
@@ -3196,7 +3191,7 @@ class TestDRB089_Yes_WorkSharingLoopRace(DRBTestCase):
 
 
 class TestDRB090_No_WorkSharingLocked(DRBTestCase):
-    def test_work_sharing_locked(self):
+    def test_work_sharing_locked(self) -> None:
         class Shared:
             sum = 0
 
@@ -3205,7 +3200,7 @@ class TestDRB090_No_WorkSharingLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(s, "sum")
 
-        def worker1():
+        def worker1() -> None:
             for _ in range(2):
                 self.det.on_acquire(lock)
                 self.det.on_read(key)
@@ -3213,7 +3208,7 @@ class TestDRB090_No_WorkSharingLocked(DRBTestCase):
                 self.det.on_release(lock)
             done1.set()
 
-        def worker2():
+        def worker2() -> None:
             done1.wait()
             for _ in range(2):
                 self.det.on_acquire(lock)
@@ -3237,7 +3232,7 @@ class TestDRB090_No_WorkSharingLocked(DRBTestCase):
 
 
 class TestDRB091_Yes_AdjacentVariableRace(DRBTestCase):
-    def test_adjacent_variable_race(self):
+    def test_adjacent_variable_race(self) -> None:
         class CacheLine:
             a = 0
             b = 0
@@ -3246,7 +3241,7 @@ class TestDRB091_Yes_AdjacentVariableRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key_a = self._key(cl, "a")
 
-        def writer_a():
+        def writer_a() -> None:
             barrier.wait()
             self.det.on_write(key_a)
 
@@ -3266,7 +3261,7 @@ class TestDRB091_Yes_AdjacentVariableRace(DRBTestCase):
 
 
 class TestDRB092_No_AdjacentVariableSafe(DRBTestCase):
-    def test_adjacent_variable_safe(self):
+    def test_adjacent_variable_safe(self) -> None:
         class CacheLine:
             a = 0
             b = 0
@@ -3276,11 +3271,11 @@ class TestDRB092_No_AdjacentVariableSafe(DRBTestCase):
         key_a = self._key(cl, "a")
         key_b = self._key(cl, "b")
 
-        def writer_a():
+        def writer_a() -> None:
             barrier.wait()
             self.det.on_write(key_a)
 
-        def writer_b():
+        def writer_b() -> None:
             barrier.wait()
             self.det.on_write(key_b)
 
@@ -3300,7 +3295,7 @@ class TestDRB092_No_AdjacentVariableSafe(DRBTestCase):
 
 
 class TestDRB093_Yes_ResourcePointerRace(DRBTestCase):
-    def test_resource_pointer_race(self):
+    def test_resource_pointer_race(self) -> None:
         class Resource:
             handle = None
 
@@ -3308,7 +3303,7 @@ class TestDRB093_Yes_ResourcePointerRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(r, "handle")
 
-        def alloc():
+        def alloc() -> None:
             barrier.wait()
             self.det.on_write(key)
 
@@ -3328,7 +3323,7 @@ class TestDRB093_Yes_ResourcePointerRace(DRBTestCase):
 
 
 class TestDRB094_No_ResourcePointerLocked(DRBTestCase):
-    def test_resource_pointer_locked(self):
+    def test_resource_pointer_locked(self) -> None:
         class Resource:
             handle = None
 
@@ -3337,13 +3332,13 @@ class TestDRB094_No_ResourcePointerLocked(DRBTestCase):
         done1 = threading.Event()
         key = self._key(r, "handle")
 
-        def alloc1():
+        def alloc1() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done1.set()
 
-        def alloc2():
+        def alloc2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_write(key)
@@ -3365,12 +3360,12 @@ class TestDRB094_No_ResourcePointerLocked(DRBTestCase):
 
 
 class TestDRB095_Yes_HistogramRace(DRBTestCase):
-    def test_histogram_race(self):
+    def test_histogram_race(self) -> None:
         bins = [0] * 4
         barrier = threading.Barrier(2)
         key_bin2 = self._list_key(bins, 2)
 
-        def fill():
+        def fill() -> None:
             barrier.wait()
             self.det.on_read(key_bin2)
             self.det.on_write(key_bin2)
@@ -3391,20 +3386,20 @@ class TestDRB095_Yes_HistogramRace(DRBTestCase):
 
 
 class TestDRB096_No_HistogramLocked(DRBTestCase):
-    def test_histogram_locked(self):
+    def test_histogram_locked(self) -> None:
         bins = [0] * 4
         lock = object()
         done1 = threading.Event()
         key_bin2 = self._list_key(bins, 2)
 
-        def fill1():
+        def fill1() -> None:
             self.det.on_acquire(lock)
             self.det.on_read(key_bin2)
             self.det.on_write(key_bin2)
             self.det.on_release(lock)
             done1.set()
 
-        def fill2():
+        def fill2() -> None:
             done1.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key_bin2)
@@ -3427,7 +3422,7 @@ class TestDRB096_No_HistogramLocked(DRBTestCase):
 
 
 class TestDRB097_Yes_UseAfterFreeRace(DRBTestCase):
-    def test_use_after_free_race(self):
+    def test_use_after_free_race(self) -> None:
         class Ptr:
             address = 123456
 
@@ -3435,11 +3430,11 @@ class TestDRB097_Yes_UseAfterFreeRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(ptr, "address")
 
-        def free():
+        def free() -> None:
             barrier.wait()
             self.det.on_write(key)  # free ptr
 
-        def use():
+        def use() -> None:
             barrier.wait()
             self.det.on_read(key)  # use ptr
 
@@ -3459,7 +3454,7 @@ class TestDRB097_Yes_UseAfterFreeRace(DRBTestCase):
 
 
 class TestDRB098_No_UseAfterFreeLocked(DRBTestCase):
-    def test_use_after_free_locked(self):
+    def test_use_after_free_locked(self) -> None:
         class Ptr:
             address = 123456
 
@@ -3468,13 +3463,13 @@ class TestDRB098_No_UseAfterFreeLocked(DRBTestCase):
         done = threading.Event()
         key = self._key(ptr, "address")
 
-        def free():
+        def free() -> None:
             self.det.on_acquire(lock)
             self.det.on_write(key)
             self.det.on_release(lock)
             done.set()
 
-        def use():
+        def use() -> None:
             done.wait()
             self.det.on_acquire(lock)
             self.det.on_read(key)
@@ -3501,7 +3496,7 @@ class TestDRB099_Yes_SignalHandlerRace(DRBTestCase):
     while another reads it in a polling loop — no synchronisation.
     """
 
-    def test_signal_handler_race(self):
+    def test_signal_handler_race(self) -> None:
         class Flag:
             signalled = False
 
@@ -3509,11 +3504,11 @@ class TestDRB099_Yes_SignalHandlerRace(DRBTestCase):
         barrier = threading.Barrier(2)
         key = self._key(f, "signalled")
 
-        def handler():
+        def handler() -> None:
             barrier.wait()
             self.det.on_write(key)  # async "signal" write
 
-        def wait_loop():
+        def wait_loop() -> None:
             barrier.wait()
             self.det.on_read(key)  # polling read
 
@@ -3540,7 +3535,7 @@ class TestDRB100_No_PublishBeforeStart(DRBTestCase):
     The fork HB edge (thread_start) orders write before read — no race.
     """
 
-    def test_publish_before_start(self):
+    def test_publish_before_start(self) -> None:
         class Flag:
             ready = False
 
@@ -3550,7 +3545,7 @@ class TestDRB100_No_PublishBeforeStart(DRBTestCase):
         # Main thread writes before spawning the reader
         self.det.on_write(key)
 
-        def reader():
+        def reader() -> None:
             self.det.on_read(key)
 
         t = threading.Thread(target=reader)

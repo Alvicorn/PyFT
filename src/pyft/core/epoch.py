@@ -7,8 +7,10 @@ _NONE_TID = -1
 
 
 class Epoch(NamedTuple):
-    tid: int  # thread identify
-    clock: int  # monotonically increasing pre-thread logical clock
+    """A single thread's logical timestamp: (thread id, clock value)."""
+
+    tid: int
+    clock: int
 
     @staticmethod
     def bottom() -> Epoch:

@@ -3,6 +3,7 @@ Integration test: concurrent writes without synchronization → WRITE_WRITE race
 """
 
 import threading
+from collections.abc import Callable
 
 import pytest
 
@@ -12,14 +13,14 @@ from .helpers import count_races_of_kind, pyft_session, run_threads
 
 
 class Shared:
-    def __init__(self):
+    def __init__(self) -> None:
         self.value = 0
         self.name = "initial"
 
 
 @pytest.mark.timeout(10)
 class TestWriteWriteRace:
-    def test_two_threads_write_same_attr(self):
+    def test_two_threads_write_same_attr(self) -> None:
         """Classic unsynchronized counter increment → write-write race."""
         with pyft_session() as (engine, track):
             obj = Shared()
@@ -28,15 +29,12 @@ class TestWriteWriteRace:
             # Use an event to maximize overlap
             go = threading.Event()
 
-            def writer(val):
+            def writer(val: int) -> None:
                 go.wait()
                 shared.value = val
 
-            # Pre-register so engine knows about child threads
-            results = []
-
-            def make_writer(val):
-                def fn():
+            def make_writer(val: int) -> Callable[[], None]:
+                def fn() -> None:
                     shared.value = val
 
                 return fn
@@ -48,13 +46,13 @@ class TestWriteWriteRace:
             race_attrs = {r.access_a.attr for r in reports}
             assert "value" in race_attrs
 
-    def test_write_write_race_kind(self):
+    def test_write_write_race_kind(self) -> None:
         """Races on concurrent writes should be WRITE_WRITE kind."""
         with pyft_session() as (engine, track):
             obj = Shared()
             shared = track(obj)
 
-            def writer(v):
+            def writer(v: int) -> None:
                 for _ in range(10):
                     shared.value = v
 
@@ -66,13 +64,13 @@ class TestWriteWriteRace:
             # Total races should be non-zero
             assert ww_count + rw_count + wr_count > 0
 
-    def test_three_threads_write(self):
+    def test_three_threads_write(self) -> None:
         """Three-way write race is detected."""
         with pyft_session() as (engine, track):
             obj = Shared()
             shared = track(obj)
 
-            def writer(v):
+            def writer(v: int) -> None:
                 shared.name = str(v)
 
             run_threads(
@@ -82,7 +80,7 @@ class TestWriteWriteRace:
             reports = engine.race_log.all_reports()
             assert len(reports) >= 1
 
-    def test_race_report_has_correct_attr(self):
+    def test_race_report_has_correct_attr(self) -> None:
         """Race report should identify the correct attribute."""
         with pyft_session() as (engine, track):
             obj = Shared()
@@ -98,7 +96,7 @@ class TestWriteWriteRace:
             for r in reports:
                 assert r.access_a.attr == "value"
 
-    def test_race_involves_two_different_threads(self):
+    def test_race_involves_two_different_threads(self) -> None:
         """Each race report must involve two distinct thread IDs."""
         with pyft_session() as (engine, track):
             obj = Shared()
@@ -112,14 +110,14 @@ class TestWriteWriteRace:
             for report in engine.race_log.all_reports():
                 assert report.access_a.tid != report.access_b.tid
 
-    def test_deduplication(self):
+    def test_deduplication(self) -> None:
         """The same variable race should only be reported once."""
         with pyft_session() as (engine, track):
             obj = Shared()
             shared = track(obj)
 
             # Many iterations to maximize chance of repeated detection
-            def writer(v):
+            def writer(v: int) -> None:
                 for _ in range(100):
                     shared.value = v
 

@@ -1,50 +1,75 @@
 from __future__ import annotations
 
+import threading
 from typing import Dict, Iterator, Optional, Tuple
+
+_real_lock = threading.Lock
 
 
 class VectorClock:
-    __slots__ = ("_clocks",)
+    """
+    Mapping of thread id to logical clock, with an internal mutex.
+
+    Every read / mutate acquires ``self._lock``. Methods that need data
+    from another VectorClock snapshot it first.
+
+    Two VC locks are never held simultaneously, so symmetric calls
+    like ``a.join(b)`` and ``b.join(a)`` cannot deadlock.
+    """
+
+    __slots__ = ("_clocks", "_lock")
 
     def __init__(self, clocks: Optional[Dict[int, int]] = None) -> None:
-        self._clocks = clocks if clocks else {}
+        self._clocks = dict(clocks) if clocks else {}
+        self._lock = _real_lock()
 
     def get(self, tid: int) -> int:
-        return self._clocks.setdefault(tid, 0)
+        with self._lock:
+            return self._clocks.get(tid, 0)
 
     def set(self, tid: int, clock: int) -> None:
         if clock < 0:
             raise ValueError("Logical clock can not be negative")
-        self._clocks[tid] = clock
+        with self._lock:
+            self._clocks[tid] = clock
 
     def increment(self, tid: int) -> int:
-        new = self.get(tid) + 1
-        self._clocks[tid] = new
-        return new
+        with self._lock:
+            new = self._clocks.get(tid, 0) + 1
+            self._clocks[tid] = new
+            return new
 
     def copy(self) -> VectorClock:
-        return VectorClock(self._clocks.copy())
+        with self._lock:
+            return VectorClock(self._clocks.copy())
 
     def items(self) -> Iterator[Tuple[int, int]]:
-        return iter(self._clocks.items())
+        with self._lock:
+            snapshot = list(self._clocks.items())
+        return iter(snapshot)
 
-    ### HAPPENS BEFORE ###
+    def _snapshot_dict(self) -> Dict[int, int]:
+        with self._lock:
+            return self._clocks.copy()
 
     def epoch_happens_before(self, tid: int, clock: int) -> bool:
-        return self.get(tid) >= clock
+        with self._lock:
+            return self._clocks.get(tid, 0) >= clock
 
     def vc_leq(self, other: VectorClock) -> bool:
-        for tid, clock in self._clocks.items():
-            if other.get(tid) < clock:
-                return False
-        return True
-
-    ### MERGING ###
+        other_snap = other._snapshot_dict()
+        with self._lock:
+            for tid, clock in self._clocks.items():
+                if other_snap.get(tid, 0) < clock:
+                    return False
+            return True
 
     def join(self, other: VectorClock) -> None:
-        for tid, clock in other.items():
-            if clock > self.get(tid):
-                self._clocks[tid] = clock
+        other_snap = other._snapshot_dict()
+        with self._lock:
+            for tid, clock in other_snap.items():
+                if clock > self._clocks.get(tid, 0):
+                    self._clocks[tid] = clock
 
     @staticmethod
     def joined(a: VectorClock, b: VectorClock) -> VectorClock:
@@ -52,24 +77,26 @@ class VectorClock:
         c.join(b)
         return c
 
-    ### EPOCH - VC CONVERSIONS ###
-
     @staticmethod
     def from_epoch(tid: int, clock: int) -> VectorClock:
         return VectorClock({tid: clock})
 
     def add_epoch(self, tid: int, clock: int) -> None:
-        if clock > self.get(tid):
-            self._clocks[tid] = clock
-
-    ### HELPFUL DUNDER METHODS ###
+        with self._lock:
+            if clock > self._clocks.get(tid, 0):
+                self._clocks[tid] = clock
 
     def __repr__(self) -> str:
-        entries = ", ".join(f"t{tid}:{c}" for tid, c in sorted(self.items()))
+        with self._lock:
+            entries = ", ".join(
+                f"t{tid}:{c}" for tid, c in sorted(self._clocks.items())
+            )
         return f"VectorClock(clocks={entries})"
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, VectorClock):
             return NotImplemented
-        all_tids = set(self._clocks) | set(other._clocks)
-        return all(self.get(t) == other.get(t) for t in all_tids)
+        a = self._snapshot_dict()
+        b = other._snapshot_dict()
+        all_tids = set(a) | set(b)
+        return all(a.get(t, 0) == b.get(t, 0) for t in all_tids)

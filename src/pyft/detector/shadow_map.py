@@ -1,7 +1,3 @@
-"""
-ShadowMap: maps (object_id, attr_name) -> VarState.
-"""
-
 from __future__ import annotations
 
 import threading
@@ -9,26 +5,27 @@ import weakref
 
 from ..core.var_state import VarState
 
+_real_lock = threading.Lock
+
 
 class ShadowMap:
     """
-    Registry: obj_id -> attr -> VarState.
+    Registry of VarState objects keyed by ``(id(obj), attr)``.
+
+    Registers a weakref finalizer on first access to each object so
+    state is dropped when the object is garbage-collected. Types that
+    do not support weakrefs (int, str, tuple, ...) are still tracked
+    but their state leaks until ``clear`` is called.
     """
 
+    __slots__ = ("_lock", "_map", "_finalizers")
+
     def __init__(self) -> None:
-        self._lock = threading.Lock()
-
-        # obj_id -> dict[attr, VarState]
+        self._lock = _real_lock()
         self._map: dict[int, dict[str, VarState]] = {}
-
-        # obj_id -> weakref.finalize handle (kept alive)
         self._finalizers: dict[int, weakref.finalize] = {}
 
     def get_or_create(self, obj: object, attr: str) -> VarState:
-        """
-        Return the VarState for (obj, attr), creating it if needed.
-        Also registers a GC finalizer on first access to this object.
-        """
         oid = id(obj)
         with self._lock:
             if oid not in self._map:
@@ -40,25 +37,18 @@ class ShadowMap:
             return attrs[attr]
 
     def _register_finalizer(self, obj: object, oid: int) -> None:
-        """
-        Register a weakref finalizer to clean up when obj is GC'd.
-        Caller holds self._lock.
-        Some built-in types don't support weakrefs — we silently skip.
-        """
         try:
             fin = weakref.finalize(obj, self._on_collect, oid)
             self._finalizers[oid] = fin
         except TypeError:
-            pass  # weakref does not support int, str tuples, ...
+            pass
 
     def _on_collect(self, oid: int) -> None:
-        """Called by GC when the tracked object is collected."""
         with self._lock:
             self._map.pop(oid, None)
             self._finalizers.pop(oid, None)
 
     def remove_object(self, oid: int) -> None:
-        """Explicitly remove all state for an object id."""
         with self._lock:
             self._map.pop(oid, None)
             fin = self._finalizers.pop(oid, None)

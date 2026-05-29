@@ -2,49 +2,47 @@ from __future__ import annotations
 
 import threading
 import traceback
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from enum import Enum
+from typing import NamedTuple
+
+_real_lock = threading.Lock
 
 
 class RaceKind(Enum):
+    """The three kinds of data race PyFT distinguishes."""
+
     WRITE_WRITE = "write-write"
     READ_WRITE = "read-write"
     WRITE_READ = "write-read"
 
 
-@dataclass(frozen=True, slots=True)
-class AccessInfo:
+class AccessInfo(NamedTuple):
+    """Snapshot of one memory access involved in a race report."""
+
     tid: int
     thread_name: str
     clock: int
     is_write: bool
     obj_repr: str
     attr: str
-    stack: tuple[str, ...] = field(default_factory=tuple)  # traceback lines
+    stack: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True, slots=True)
 class RaceReport:
-    """
-    Immutable record of one data race.
-    The two accesses are `access_a` (the one being checked) and
-    `access_b` (the prior conflicting access recovered from VarState).
-    """
+    """Immutable record of one detected data race."""
 
     kind: RaceKind
-    access_a: AccessInfo  # current access (the one that triggered detection)
-    access_b: AccessInfo  # prior conflicting access (from shadow state)
+    access_a: AccessInfo
+    access_b: AccessInfo
     obj_id: int
-    sequence: int  # global monotonic counter for ordering
+    sequence: int  # monotonic ordering
 
 
 def _capture_stack(skip_frames: int = 3) -> tuple[str, ...]:
-    """
-    Capture the current call stack as a tuple of formatted strings,
-    skipping internal pyft frames.
-    """
     frames = traceback.format_stack()
-    # Drop the last `skip_frames` which are PyFT internals
     relevant = frames[:-skip_frames] if len(frames) > skip_frames else frames
     return tuple(relevant)
 
@@ -59,39 +57,50 @@ def _safe_repr(obj: object, max_len: int = 60) -> str:
 
 class RaceLog:
     """
-    Thread-safe append-only log of RaceReport objects.
-    Deduplicates: the same (obj_id, attr, tid_a, tid_b) tuple is only
-    recorded once to avoid flooding the report with the same race
-    repeated thousands of times.
+    Thread-safe append-only log of RaceReport objects with a de-duplication key.
+
+    De-duplication key: ``(obj_id, attr, frozenset({tid_a, tid_b}), kind)``.
+
+    Sequence numbers are assigned inside the de-dup critical section so
+    suppressed duplicates do not leave gaps.
     """
 
+    __slots__ = ("_lock", "_reports", "_seen", "_counter")
+
     def __init__(self) -> None:
-        self._lock = threading.Lock()
+        self._lock = _real_lock()
         self._reports: list[RaceReport] = []
         self._seen: set[tuple] = set()
         self._counter = 0
 
-    def record(self, report: RaceReport) -> bool:
+    def record(
+        self, report_or_factory: RaceReport | Callable[[], RaceReport]
+    ) -> bool:
         """
-        Add a report. Returns True if it was new (not a duplicate).
+        Append a RaceReport. Return True if it was new.
+
+        Accepts a RaceReport (its ``sequence`` is overwritten) or a
+        zero-arg factory that produces one.
         """
+        if callable(report_or_factory):
+            report = report_or_factory()
+        else:
+            report = report_or_factory
+
         key = (
             report.obj_id,
             report.access_a.attr,
             frozenset([report.access_a.tid, report.access_b.tid]),
-            # report.kind,
+            report.kind,
         )
         with self._lock:
             if key in self._seen:
                 return False
             self._seen.add(key)
-            self._reports.append(report)
-            return True
-
-    def next_sequence(self) -> int:
-        with self._lock:
             self._counter += 1
-            return self._counter
+            stamped = replace(report, sequence=self._counter)
+            self._reports.append(stamped)
+            return True
 
     def all_reports(self) -> list[RaceReport]:
         with self._lock:

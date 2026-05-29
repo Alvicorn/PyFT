@@ -5,8 +5,12 @@ from typing import Dict, List, Optional
 
 from .vector_clock import VectorClock
 
+_real_rlock = threading.RLock
+
 
 class ThreadState:
+    """Per-thread VerifiedFT state with a thread id, name, and vector clock."""
+
     __slots__ = ("tid", "vc", "name")
 
     def __init__(
@@ -39,8 +43,10 @@ class ThreadState:
 
 
 class ThreadRegistry:
+    """Thread-safe registry of ThreadState objects keyed by thread id."""
+
     def __init__(self) -> None:
-        self._lock = threading.RLock()
+        self._lock = _real_rlock()
         self._states: Dict[int, ThreadState] = {}
 
     def register(
