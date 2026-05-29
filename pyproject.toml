@@ -8,6 +8,7 @@ dependencies = []
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
     "pytest-timeout>=2.4.0",
@@ -26,6 +27,30 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 filterwarnings = ["ignore::DeprecationWarning"]
 # addopts = "--cov=pyft --cov-report=term-missing"
+
+[tool.mypy]
+python_version = "3.14"
+explicit_package_bases = true
+namespace_packages = true
+
+# Tests monkey-patch engine methods, override class attributes, and probe
+# private wrapper internals — disable the typing errors that pattern hits.
+# Patterns cover both the dotted form (tests.unit.foo.test_bar) used when
+# mypy is invoked on the package, and the bare form (test_bar, helpers)
+# used when pre-commit passes individual files without __init__.py chains.
+[[tool.mypy.overrides]]
+module = ["tests.*", "test_*", "helpers", "conftest"]
+disable_error_code = [
+    "method-assign",
+    "attr-defined",
+    "assignment",
+    "func-returns-value",
+    "arg-type",
+    "var-annotated",
+    "union-attr",
+    "import-not-found",
+    "misc",
+]
 
 [tool.coverage.run]
 source = ["pyft"]

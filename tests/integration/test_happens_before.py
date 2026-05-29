@@ -6,15 +6,14 @@ from .helpers import assert_no_races, pyft_session
 
 
 class Payload:
-    def __init__(self):
+    def __init__(self) -> None:
         self.result = None
         self.input = None
 
 
 @pytest.mark.timeout(10)
 class TestHappensBeforeForkJoin:
-    @pytest.mark.skip()
-    def test_parent_write_before_fork_no_race(self):
+    def test_parent_write_before_fork_no_race(self) -> None:
         """
         Parent writes to obj BEFORE starting child thread.
         Child reads. Fork establishes HB → no race.
@@ -28,7 +27,7 @@ class TestHappensBeforeForkJoin:
 
             results = []
 
-            def child():
+            def child() -> None:
                 # This read is HB-after the write above (fork edge)
                 results.append(shared.input)
 
@@ -38,8 +37,7 @@ class TestHappensBeforeForkJoin:
 
             assert_no_races(engine)
 
-    @pytest.mark.skip()
-    def test_child_write_before_join_no_race(self):
+    def test_child_write_before_join_no_race(self) -> None:
         """
         Child writes to obj BEFORE joining.
         Parent reads after join. Join establishes HB → no race.
@@ -48,7 +46,7 @@ class TestHappensBeforeForkJoin:
             obj = Payload()
             shared = track(obj)
 
-            def child():
+            def child() -> None:
                 shared.result = 99
 
             t = threading.Thread(target=child)
@@ -59,8 +57,7 @@ class TestHappensBeforeForkJoin:
             _ = shared.result
             assert_no_races(engine)
 
-    @pytest.mark.skip()
-    def test_fork_join_chain_no_race(self):
+    def test_fork_join_chain_no_race(self) -> None:
         """
         Sequential thread chain: T1 → T2 → T3, each writes then joins.
         All transitions are HB-ordered → no races.
@@ -69,7 +66,7 @@ class TestHappensBeforeForkJoin:
             obj = Payload()
             shared = track(obj)
 
-            def stage(val):
+            def stage(val: int) -> None:
                 shared.result = val
 
             for val in [1, 2, 3]:
@@ -79,8 +76,7 @@ class TestHappensBeforeForkJoin:
 
             assert_no_races(engine)
 
-    @pytest.mark.skip()
-    def test_parent_read_before_child_write_without_join_races(self):
+    def test_parent_read_before_child_write_without_join_races(self) -> None:
         """
         Without join, parent reading after child started (but not joined)
         may race with child's write.
@@ -91,7 +87,7 @@ class TestHappensBeforeForkJoin:
             # ready = threading.Barrier(2)
             # started = threading.Event()
 
-            def child():
+            def child() -> None:
                 # ready.wait()
                 # started.set()
                 # time.sleep(0.001)
@@ -112,7 +108,7 @@ class TestHappensBeforeForkJoin:
             reports = engine.race_log.all_reports()
             assert len(reports) >= 1
 
-    def test_multiple_children_all_joined_no_race(self):
+    def test_multiple_children_all_joined_no_race(self) -> None:
         """
         Parent forks N children, each writes to a different attribute,
         then parent joins all and reads all → no races.
@@ -127,7 +123,7 @@ class TestHappensBeforeForkJoin:
             N = 5
             threads = []
 
-            def child_write(i):
+            def child_write(i: int) -> None:
                 setattr(shared, f"slot_{i}", i * 10)
 
             for i in range(N):
@@ -144,8 +140,7 @@ class TestHappensBeforeForkJoin:
 
             assert_no_races(engine)
 
-    @pytest.mark.skip()
-    def test_fork_hb_means_child_sees_parent_history(self):
+    def test_fork_hb_means_child_sees_parent_history(self) -> None:
         """
         After fork, child's VC must include parent's clock, meaning
         child treats parent's prior writes as happened-before.
@@ -161,7 +156,7 @@ class TestHappensBeforeForkJoin:
 
             read_val = []
 
-            def child():
+            def child() -> None:
                 # Child reads — must see result=3 without race
                 read_val.append(shared.result)
 

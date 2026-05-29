@@ -1,28 +1,18 @@
 """
-For each loaded module, patch its code objects so that every
-attribute/subscript access calls back into the engine:
+AccessTracer: automatic attribute / subscript tracing for user code.
 
-  obj.attr        (LOAD_ATTR)       ->  engine.read(obj, "attr");
-  obj.attr = val  (STORE_ATTR)      -> engine.write(obj, "attr");
-  obj[key]        (BINARY_SUBSCR)   -> engine.read(obj, repr(key));
-  obj[key] = val  (STORE_SUBSCR)    -> engine.write(obj, repr(key));
+Strategy is AST rewriting at module import time; the real implementation
+lives in ``import_hook.py``. Modules already imported when
+``AccessTracer.install()`` is called are not retroactively
+instrumented — only NEW imports go through the hook.
 """
 
 from __future__ import annotations
 
-import dis
-import sys
-import types
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ..detector.engine import Engine
-
-
-_LOAD_ATTR = dis.opmap.get("LOAD_ATTR", -1)
-_STORE_ATTR = dis.opmap.get("STORE_ATTR", -1)
-_BINARY_SUBSCR = dis.opmap.get("BINARY_SUBSCR", -1)
-_STORE_SUBSCR = dis.opmap.get("STORE_SUBSCR", -1)
 
 
 _SKIP_PREFIXES = (
@@ -37,6 +27,20 @@ _SKIP_PREFIXES = (
     "traceback",
     "linecache",
     "tokenize",
+    "ast",
+    "inspect",
+    "logging",
+    "sys",
+    "os",
+    "io",
+    "re",
+    "collections",
+    "functools",
+    "itertools",
+    "encodings",
+    "codecs",
+    "warnings",
+    "contextlib",
 )
 
 
@@ -47,69 +51,28 @@ def should_skip_module(module_name: str) -> bool:
     )
 
 
-def instrument_code(
-    code: types.CodeType, engine: "Engine", module_name: str
-) -> types.CodeType:
-    """
-    Recursively instrument a code object and all nested code objects
-    (comprehensions, lambdas, inner functions, class bodies).
-
-    Returns a new code object with instrumentation injected.
-    This is a best-effort transform: if anything fails we return
-    the original code unchanged.
-    """
-    try:
-        return _instrument_code_inner(code, engine, module_name)
-    except Exception:
-        return code
-
-
-def _instrument_code_inner(
-    code: types.CodeType, engine: "Engine", module_name: str
-) -> types.CodeType:
-    """
-    Inject wrapper functions into the module's globals and
-    use sys.settrace-style function wrapping on __getattribute__ and
-    __setattr__ for objects.
-    """
-    # recursively handle nested code objects (inner functions, etc.)
-    new_consts = list(code.co_consts)
-    changed = False
-    for i, const in enumerate(new_consts):
-        if isinstance(const, types.CodeType):
-            new_const = _instrument_code_inner(const, engine, module_name)
-            if new_const is not const:
-                new_consts[i] = new_const
-                changed = True
-
-    if changed:
-        return code.replace(co_consts=tuple(new_consts))
-    return code
-
-
 class AccessTracer:
     """
-    Installs a sys.monitoring-based tracer that fires on attribute
-    access events.
-
-    Python 3.12+ sys.monitoring is used to hook CALL events
-    combined with __getattribute__/__setattr__ wrapping on tracked
-    objects to detect read/write accesses.
+    Installs the AST-rewriting import hook so newly-imported user
+    modules have their attribute reads / writes / subscripts routed
+    through the engine. Skips modules listed in ``_SKIP_PREFIXES``.
     """
-
-    TOOL_ID = sys.monitoring.DEBUGGER_ID  # Use debugger slot
 
     def __init__(self, engine: "Engine") -> None:
         self.engine = engine
+        from .import_hook import ImportHook
+
+        self._hook = ImportHook(engine)
         self._installed = False
 
     def install(self) -> None:
         if self._installed:
             return
-        # rely on sync_patch.py + wrappers.py for instrumentation.
+        self._hook.install()
         self._installed = True
 
     def uninstall(self) -> None:
         if not self._installed:
             return
+        self._hook.uninstall()
         self._installed = False

@@ -6,45 +6,45 @@ from pyft.detector.engine import Engine
 class SimpleObj:
     """A plain object to use as a test target."""
 
-    def __init__(self, x=0, y=0):
+    def __init__(self, x: int = 0, y: int = 0) -> None:
         self.x = x
         self.y = y
 
 
 class TestEngineSetup:
-    def test_main_thread_registered_on_init(self):
+    def test_main_thread_registered_on_init(self) -> None:
         engine = Engine()
         tid = id(threading.current_thread())
         ts = engine.thread_registry.get(tid)
         assert ts is not None
 
-    def test_initial_no_races(self):
+    def test_initial_no_races(self) -> None:
         engine = Engine()
         assert len(engine.race_log) == 0
 
 
 class TestSingleThreadNoRace:
-    def test_single_thread_write_no_race(self):
+    def test_single_thread_write_no_race(self) -> None:
         engine = Engine()
         obj = SimpleObj()
         engine.write(obj, "x")
         assert len(engine.race_log) == 0
 
-    def test_single_thread_read_no_race(self):
+    def test_single_thread_read_no_race(self) -> None:
         engine = Engine()
         obj = SimpleObj()
         engine.write(obj, "x")
         engine.read(obj, "x")
         assert len(engine.race_log) == 0
 
-    def test_single_thread_multiple_writes_no_race(self):
+    def test_single_thread_multiple_writes_no_race(self) -> None:
         engine = Engine()
         obj = SimpleObj()
         for _ in range(100):
             engine.write(obj, "x")
         assert len(engine.race_log) == 0
 
-    def test_not_shared_never_races(self):
+    def test_not_shared_never_races(self) -> None:
         """Objects only accessed by one thread are never flagged."""
         engine = Engine()
         obj = SimpleObj()
@@ -56,7 +56,7 @@ class TestSingleThreadNoRace:
 
 
 class TestLockSynchronization:
-    def test_lock_acquire_absorbs_release_vc(self):
+    def test_lock_acquire_absorbs_release_vc(self) -> None:
         """After acquire, thread's VC should include releaser's clock."""
         engine = Engine()
         lock = threading.Lock()
@@ -68,7 +68,7 @@ class TestLockSynchronization:
 
         # Simulate T1 releasing (sets release_vc)
         engine.lock_release(lock_id)
-        release_clock = ts.current_clock()
+        ts.current_clock()
 
         # Simulate T2 acquiring: should absorb T1's VC
         # (In single-thread test: self-acquire restores own VC)
@@ -76,7 +76,7 @@ class TestLockSynchronization:
         # No crash, no race
         assert len(engine.race_log) == 0
 
-    def test_lock_release_ticks_clock(self):
+    def test_lock_release_ticks_clock(self) -> None:
         engine = Engine()
         lock_id = 12345
 
@@ -92,7 +92,7 @@ class TestLockSynchronization:
 
 
 class TestThreadLifecycle:
-    def test_thread_start_registers_child(self):
+    def test_thread_start_registers_child(self) -> None:
         engine = Engine()
         parent_tid = id(threading.current_thread())
         child_tid = 99999
@@ -101,7 +101,7 @@ class TestThreadLifecycle:
         child_ts = engine.thread_registry.get(child_tid)
         assert child_ts is not None
 
-    def test_thread_start_child_inherits_parent_vc(self):
+    def test_thread_start_child_inherits_parent_vc(self) -> None:
         engine = Engine()
         parent_tid = id(threading.current_thread())
         parent_ts = engine.thread_registry.get(parent_tid)
@@ -118,7 +118,7 @@ class TestThreadLifecycle:
         assert child_ts.vc is not None
         assert child_ts.vc.get(parent_tid) >= 5
 
-    def test_thread_join_absorbs_child_vc(self):
+    def test_thread_join_absorbs_child_vc(self) -> None:
         engine = Engine()
         parent_tid = id(threading.current_thread())
         child_tid = 99997
@@ -136,7 +136,7 @@ class TestThreadLifecycle:
         assert parent_ts.vc is not None
         assert parent_ts.vc.get(child_tid) == 10
 
-    def test_thread_join_removes_child_from_registry(self):
+    def test_thread_join_removes_child_from_registry(self) -> None:
         engine = Engine()
         parent_tid = id(threading.current_thread())
         child_tid = 99996
@@ -148,7 +148,7 @@ class TestThreadLifecycle:
 
 
 class TestReentrancyGuard:
-    def test_nested_engine_call_is_ignored(self):
+    def test_nested_engine_call_is_ignored(self) -> None:
         """Engine should not recurse into itself."""
         engine = Engine()
         obj = SimpleObj()
@@ -163,7 +163,7 @@ class TestReentrancyGuard:
 
 
 class TestRealThreadRace:
-    def test_write_write_race_detected(self):
+    def test_write_write_race_detected(self) -> None:
         """Two unordered concurrent writes -> write-write race detected."""
         engine = Engine()
         obj = SimpleObj()
@@ -171,7 +171,7 @@ class TestRealThreadRace:
         # Barrier(2) releases both writers simultaneously — no HB between them.
         barrier = threading.Barrier(2)
 
-        def writer():
+        def writer() -> None:
             try:
                 barrier.wait()
                 engine.write(obj, "x")
@@ -197,14 +197,14 @@ class TestRealThreadRace:
             "Expected a write-write race to be detected"
         )
 
-    def test_no_crash_under_concurrent_engine_calls(self):
+    def test_no_crash_under_concurrent_engine_calls(self) -> None:
         """Engine must be thread-safe under concurrent read/write events."""
         engine = Engine()
         obj = SimpleObj()
         errors = []
         ITERATIONS = 500
 
-        def accessor():
+        def accessor() -> None:
             tid = id(threading.current_thread())
             engine.thread_registry.get_or_register(tid)
             for _ in range(ITERATIONS):
