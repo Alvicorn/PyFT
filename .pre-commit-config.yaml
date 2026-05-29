@@ -12,7 +12,7 @@ repos:
     -   id: debug-statements
     -   id: name-tests-test
         args: [ --pytest-test-first ] # ensure tests match test_.*\.py
-        exclude: ^tests/integration/helpers\.py$
+        exclude: ^tests/integration/(helpers\.py|_container_workload\.py)$
 -   repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.0
     hooks:
