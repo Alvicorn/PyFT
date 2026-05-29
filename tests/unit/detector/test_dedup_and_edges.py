@@ -9,10 +9,12 @@ import threading
 
 import pytest
 
-from pyft.core.var_state import VarState
+from pyft.core.var_state import VarStateV2
 from pyft.detector.engine import Engine
 from pyft.detector.race_log import AccessInfo, RaceKind, RaceLog, RaceReport
 from pyft.detector.shadow_map import ShadowMap
+
+VarState = VarStateV2
 
 
 class _Obj:

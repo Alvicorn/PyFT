@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import threading
 import weakref
+from typing import Callable, Union
 
-from ..core.var_state import VarState
+from ..core.var_state import VarStateV1, VarStateV2
 
 _real_lock = threading.Lock
+
+_AnyVarState = Union[VarStateV1, VarStateV2]
 
 
 class ShadowMap:
@@ -16,16 +19,22 @@ class ShadowMap:
     state is dropped when the object is garbage-collected. Types that
     do not support weakrefs (int, str, tuple, ...) are still tracked
     but their state leaks until ``clear`` is called.
+
+    The ``var_state_factory`` parameter selects which VerifiedFT
+    variant to instantiate (defaults to V2).
     """
 
-    __slots__ = ("_lock", "_map", "_finalizers")
+    __slots__ = ("_lock", "_map", "_finalizers", "_factory")
 
-    def __init__(self) -> None:
+    def __init__(
+        self, var_state_factory: Callable[[], _AnyVarState] = VarStateV2
+    ) -> None:
         self._lock = _real_lock()
-        self._map: dict[int, dict[str, VarState]] = {}
+        self._map: dict[int, dict[str, _AnyVarState]] = {}
         self._finalizers: dict[int, weakref.finalize] = {}
+        self._factory = var_state_factory
 
-    def get_or_create(self, obj: object, attr: str) -> VarState:
+    def get_or_create(self, obj: object, attr: str) -> _AnyVarState:
         oid = id(obj)
         with self._lock:
             if oid not in self._map:
@@ -33,7 +42,7 @@ class ShadowMap:
                 self._register_finalizer(obj, oid)
             attrs = self._map[oid]
             if attr not in attrs:
-                attrs[attr] = VarState()
+                attrs[attr] = self._factory()
             return attrs[attr]
 
     def _register_finalizer(self, obj: object, oid: int) -> None:
