@@ -25,7 +25,7 @@ class TestEpoch:
         assert Epoch(2, 3) != Epoch(1, 3)
         assert Epoch(1, 2) != Epoch(1, 3)
 
-    def test_repr(self):
+    def test_repr(self) -> None:
         assert "⊥" in repr(Epoch.bottom())
 
         r = repr(Epoch(5, 10))
@@ -52,7 +52,7 @@ class TestCurrentEpoch:
 
         results = {}
 
-        def record():
+        def record() -> None:
             tid = threading.get_ident()
             results[tid] = current_epoch({tid: 5})
 

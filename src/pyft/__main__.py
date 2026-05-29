@@ -1,8 +1,10 @@
 """
 python -m pyft myscript.py [args...]
 
-Runs myscript.py under the pyft race detector and prints a race
-report to stderr when the script exits.
+Runs ``myscript.py`` under the PyFT race detector and prints a race
+report to stderr when the script exits. The entry script is
+AST-transformed before exec, and every module it subsequently imports
+goes through the AccessTracer import hook installed by ``pyft.install``.
 
 Examples:
   python -m pyft my_threaded_script.py
@@ -13,8 +15,24 @@ from __future__ import annotations
 
 import argparse
 import os
-import runpy
 import sys
+import types
+
+
+def _run_script_instrumented(script_path: str) -> None:
+    """Read ``script_path``, AST-transform it, and exec it as ``__main__``."""
+    from .instrument.import_hook import transform_source
+
+    with open(script_path, "r", encoding="utf-8") as fh:
+        source = fh.read()
+    tree = transform_source(source, script_path)
+    code = compile(tree, script_path, "exec")
+
+    main_mod = types.ModuleType("__main__")
+    main_mod.__file__ = script_path
+    main_mod.__builtins__ = __builtins__  # type: ignore[attr-defined]
+    sys.modules["__main__"] = main_mod
+    exec(code, main_mod.__dict__)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,22 +56,19 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    # Set up sys.argv for the target script
     sys.argv = [args.script] + args.script_args
 
-    # Add script's directory to sys.path (same as running it directly)
     script_dir = os.path.dirname(os.path.abspath(args.script))
     if script_dir not in sys.path:
         sys.path.insert(0, script_dir)
 
-    # Install the detector
     import pyft
 
     pyft.install()
 
     exit_code = 0
     try:
-        runpy.run_path(args.script, run_name="__main__")
+        _run_script_instrumented(args.script)
     except SystemExit as e:
         exit_code = e.code if isinstance(e.code, int) else 0
     except Exception as e:
@@ -64,9 +79,6 @@ def main(argv: list[str] | None = None) -> int:
         exit_code = 1
     finally:
         pyft.uninstall()
-        # Always print the report
-        import sys as _sys
-
         from pyft import get_engine
         from pyft.report.formatter import format_summary
 
@@ -75,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
             use_colour = not args.no_colour
             print(
                 format_summary(engine.race_log, use_colour=use_colour),
-                file=_sys.stderr,
+                file=sys.stderr,
             )
 
     return exit_code

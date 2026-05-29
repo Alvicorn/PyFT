@@ -6,47 +6,47 @@ from pyft.core.vector_clock import VectorClock
 T1, T2, T3 = 101, 102, 103
 
 
-def vc(*pairs) -> VectorClock:
+def vc(*pairs: tuple[int, int]) -> VectorClock:
     """Helper: vc((t1,c1), (t2,c2)) → VectorClock"""
     return VectorClock(dict(pairs))
 
 
 class TestInitialState:
-    def test_fresh_var_state(self):
+    def test_fresh_var_state(self) -> None:
         vs = VarState()
         assert vs.write_epoch.is_bottom()
         assert isinstance(vs.read_state, ReadBottom)
         assert vs.first_tid == _NONE_TID
         assert not vs.is_shared
 
-    def test_repr_does_not_crash(self):
+    def test_repr_does_not_crash(self) -> None:
         vs = VarState()
         assert "VarState" in repr(vs)
 
 
 class TestSharingDetection:
-    def test_first_access_sets_first_tid(self):
+    def test_first_access_sets_first_tid(self) -> None:
         vs = VarState()
         became_shared = vs._note_access(T1)
         assert vs.first_tid == T1
         assert not became_shared
         assert not vs.is_shared
 
-    def test_second_access_same_thread_not_shared(self):
+    def test_second_access_same_thread_not_shared(self) -> None:
         vs = VarState()
         vs._note_access(T1)
         became_shared = vs._note_access(T1)
         assert not became_shared
         assert not vs.is_shared
 
-    def test_second_access_different_thread_becomes_shared(self):
+    def test_second_access_different_thread_becomes_shared(self) -> None:
         vs = VarState()
         vs._note_access(T1)
         became_shared = vs._note_access(T2)
         assert became_shared
         assert vs.is_shared
 
-    def test_sharing_is_sticky(self):
+    def test_sharing_is_sticky(self) -> None:
         vs = VarState()
         vs._note_access(T1)
         vs._note_access(T2)
@@ -56,12 +56,12 @@ class TestSharingDetection:
 
 
 class TestReadNoRace:
-    def test_read_with_no_prior_write(self):
+    def test_read_with_no_prior_write(self) -> None:
         vs = VarState()
         race, _ = vs.check_read(T2, vc((T2, 1)))
         assert not race
 
-    def test_read_after_ordered_write_same_thread(self):
+    def test_read_after_ordered_write_same_thread(self) -> None:
         """R2: same thread as writer — always safe."""
         vs = VarState()
         vs.write_epoch = Epoch(T1, 3)
@@ -74,7 +74,7 @@ class TestReadNoRace:
         race, _ = vs.check_read(T1, vc((T1, 5)))
         assert not race
 
-    def test_read_after_hb_write_different_thread(self):
+    def test_read_after_hb_write_different_thread(self) -> None:
         """R3: write happened-before this read."""
         vs = VarState()
         vs.write_epoch = Epoch(T1, 3)
@@ -87,7 +87,7 @@ class TestReadNoRace:
         race, _ = vs.check_read(T2, vc((T1, 3), (T2, 1)))
         assert not race
 
-    def test_read_after_hb_write_clock_exceeds(self):
+    def test_read_after_hb_write_clock_exceeds(self) -> None:
         vs = VarState()
         vs.write_epoch = Epoch(T1, 2)
 
@@ -100,7 +100,7 @@ class TestReadNoRace:
 
 
 class TestReadRace:
-    def test_concurrent_write_read(self):
+    def test_concurrent_write_read(self) -> None:
         """Write by T1 is concurrent with read by T2."""
         vs = VarState()
         vs.write_epoch = Epoch(T1, 5)
@@ -113,7 +113,7 @@ class TestReadRace:
         race, _ = vs.check_read(T2, vc((T1, 2), (T2, 3)))
         assert race
 
-    def test_write_at_exact_boundary_is_not_race(self):
+    def test_write_at_exact_boundary_is_not_race(self) -> None:
         vs = VarState()
         vs.write_epoch = Epoch(T1, 3)
 
@@ -126,26 +126,26 @@ class TestReadRace:
 
 
 class TestReadStateProgression:
-    def test_first_read_creates_read_epoch(self):
+    def test_first_read_creates_read_epoch(self) -> None:
         vs = VarState()
         vs.check_read(T1, vc((T1, 2)))
         assert isinstance(vs.read_state, ReadEpoch)
         assert vs.read_state.tid == T1
 
-    def test_second_read_same_thread_stays_epoch(self):
+    def test_second_read_same_thread_stays_epoch(self) -> None:
         vs = VarState()
         vs.check_read(T1, vc((T1, 2)))
         vs.check_read(T1, vc((T1, 4)))
         assert isinstance(vs.read_state, ReadEpoch)
         assert vs.read_state.clock == 4
 
-    def test_second_read_different_thread_upgrades_to_vc(self):
+    def test_second_read_different_thread_upgrades_to_vc(self) -> None:
         vs = VarState()
         vs.check_read(T1, vc((T1, 2)))
         vs.check_read(T2, vc((T2, 3)))
         assert isinstance(vs.read_state, ReadVC)
 
-    def test_third_reader_adds_to_vc(self):
+    def test_third_reader_adds_to_vc(self) -> None:
         vs = VarState()
         vs.check_read(T1, vc((T1, 1)))
         vs.check_read(T2, vc((T2, 1)))
@@ -158,7 +158,7 @@ class TestReadStateProgression:
 
 
 class TestWriteNoRace:
-    def test_same_thread_no_race(self):
+    def test_same_thread_no_race(self) -> None:
         vs = VarState()
         vc = VectorClock()
         vc.set(1, 1)
@@ -170,7 +170,7 @@ class TestWriteNoRace:
         assert not read_race
         assert not write_race
 
-    def test_write_with_no_prior_state(self):
+    def test_write_with_no_prior_state(self) -> None:
         vs = VarState()
 
         # artificially mark T1 and T2 as exclusive
@@ -181,7 +181,7 @@ class TestWriteNoRace:
         assert not read_race
         assert not write_race
 
-    def test_write_after_hb_write(self):
+    def test_write_after_hb_write(self) -> None:
         vs = VarState()
         vs.write_epoch = Epoch(T1, 2)
 
@@ -192,7 +192,7 @@ class TestWriteNoRace:
         read_race, write_race, _, _ = vs.check_write(T2, vc((T1, 2), (T2, 1)))
         assert not write_race
 
-    def test_write_after_hb_read(self):
+    def test_write_after_hb_read(self) -> None:
         vs = VarState()
         vs.read_state = ReadEpoch(T1, 2)
 
@@ -203,7 +203,7 @@ class TestWriteNoRace:
         read_race, write_race, _, _ = vs.check_write(T2, vc((T1, 2), (T2, 1)))
         assert not read_race
 
-    def test_write_clears_read_state(self):
+    def test_write_clears_read_state(self) -> None:
         vs = VarState()
 
         # artificially mark T1 and T2 as exclusive
@@ -214,7 +214,7 @@ class TestWriteNoRace:
         vs.check_write(T2, vc((T1, 1), (T2, 1)))
         assert isinstance(vs.read_state, ReadBottom)
 
-    def test_write_updates_write_epoch(self):
+    def test_write_updates_write_epoch(self) -> None:
         vs = VarState()
 
         # artificially mark T1 and T2 as exclusive
@@ -226,7 +226,7 @@ class TestWriteNoRace:
 
 
 class TestWriteRace:
-    def test_concurrent_write_write(self):
+    def test_concurrent_write_write(self) -> None:
         vs = VarState()
         vs.write_epoch = Epoch(T1, 5)
 
@@ -237,7 +237,7 @@ class TestWriteRace:
         _, write_race, _, _ = vs.check_write(T2, vc((T1, 2), (T2, 1)))
         assert write_race
 
-    def test_concurrent_read_write(self):
+    def test_concurrent_read_write(self) -> None:
         vs = VarState()
         vs.read_state = ReadEpoch(T1, 5)
 
@@ -248,7 +248,7 @@ class TestWriteRace:
         read_race, _, _, _ = vs.check_write(T2, vc((T1, 2), (T2, 1)))
         assert read_race
 
-    def test_concurrent_read_write_with_read_vc(self):
+    def test_concurrent_read_write_with_read_vc(self) -> None:
         """Race detected when any reader in ReadVC is concurrent."""
         vs = VarState()
         rc_vc = VectorClock({T1: 5, T3: 3})
@@ -264,7 +264,7 @@ class TestWriteRace:
         read_race, _, _, _ = vs.check_write(T2, vc((T1, 2), (T2, 1), (T3, 3)))
         assert read_race
 
-    def test_own_thread_write_after_own_read_not_race(self):
+    def test_own_thread_write_after_own_read_not_race(self) -> None:
         vs = VarState()
         vs.read_state = ReadEpoch(T1, 3)
 
@@ -302,7 +302,7 @@ class TestRaceWithLocks:
 
         assert not write_race
 
-    def test_missing_lock_causes_race(self):
+    def test_missing_lock_causes_race(self) -> None:
         vs = VarState()
 
         vc1 = VectorClock()
@@ -332,7 +332,7 @@ class TestForkHBWrites:
     pre-manipulation) so they would have caught the bug.
     """
 
-    def test_fork_ordered_writes_no_race(self):
+    def test_fork_ordered_writes_no_race(self) -> None:
         """T1 writes, then T2 writes with T2's VC including T1's clock → no race."""
         vs = VarState()
 
@@ -347,7 +347,7 @@ class TestForkHBWrites:
         _, write_race, _, _ = vs.check_write(T2, vc((T1, 2), (T2, 1)))
         assert not write_race
 
-    def test_unordered_writes_across_first_sharing_still_race(self):
+    def test_unordered_writes_across_first_sharing_still_race(self) -> None:
         """T1 writes, T2 writes WITHOUT HB → still a write-write race."""
         vs = VarState()
 
@@ -358,7 +358,7 @@ class TestForkHBWrites:
         _, write_race, _, _ = vs.check_write(T2, vc((T2, 1)))
         assert write_race
 
-    def test_fork_ordered_write_after_read_no_race(self):
+    def test_fork_ordered_write_after_read_no_race(self) -> None:
         """T1 reads, fork, T2 writes with HB → no read-write race."""
         vs = VarState()
 
@@ -371,7 +371,7 @@ class TestForkHBWrites:
         assert not read_race
         assert not write_race
 
-    def test_fork_ordered_read_after_write_no_race(self):
+    def test_fork_ordered_read_after_write_no_race(self) -> None:
         """T1 writes, fork, T2 reads with HB → no write-read race."""
         vs = VarState()
 

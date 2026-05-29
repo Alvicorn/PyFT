@@ -3,85 +3,85 @@ PyFT — VerifiedFT precise dynamic race detector for free-threaded Python.
 
 Public API:
 
-  pyft.install()          Start the detector (patches threading primitives)
-  pyft.uninstall()        Stop the detector and restore original primitives
-  pyft.track(obj)         Return a proxy that tracks accesses to obj
+  pyft.install()          Start the detector
+  pyft.uninstall()        Stop the detector and restore patched primitives
   pyft.report()           Print the race report to stderr
   pyft.races()            Return list[RaceReport] for programmatic inspection
   pyft.reset()            Clear all recorded races (keeps detector running)
   pyft.context()          Context manager: install on enter, report+uninstall on exit
+  @pyft.detect            Decorator: install around a function, report on return
+  pyft.get_engine()       Return the active Engine (for advanced inspection)
 
 Typical usage:
 
-  import pyft
-
   with pyft.context():
-      # ... your multi-threaded code ...
-      shared = pyft.track(MyObject())
-      # use shared.x, shared.y etc.
+      import myapp                 # auto-traced by the import hook
+      myapp.run_concurrent_code()
 
 Or as a decorator:
+
   @pyft.detect
   def test_my_concurrent_code():
-      ...
+      import workload
+      workload.do_stuff()
 
-Note: for auto-detection of shared objects, wrap objects with pyft.track()
-or use pyft.track_class() to instrument a class. Objects not passed through
-track() are only flagged if they are accessed via a tracked container.
+How tracing works: ``install()`` registers an AST-rewriting import hook
+plus monkey-patches for threading primitives. Any module imported AFTER
+install runs through the hook, so its attribute access, subscripts, and
+sync events feed the engine automatically. Modules imported BEFORE
+install are not instrumented — structure your code so the workload lives
+in a module that is imported inside the ``context()`` or ``@detect``
+scope, or run the whole program with ``python -m pyft script.py``.
 """
 
 from __future__ import annotations
 
 import contextlib
-import threading
-from typing import Any, TypeVar
+from collections.abc import Callable, Iterator
+from typing import IO, TypeVar
 
 from .detector.engine import Engine
 from .detector.race_log import RaceReport
 from .report.formatter import print_summary
 
 try:
-    from .instrument.monitor import SyncMonitor
+    from .instrument.lock_patcher import LockPatcher
     from .instrument.transformer import AccessTracer
-    from .instrument.wrappers import (
-        AutoTracker,
-        TrackedProxy,
-        make_tracked_class,
-    )
+    from .instrument.wrappers import AutoTracker
 
-    _HAS_MONITORING = True
+    _HAS_INSTRUMENT = True
 except AttributeError:
-    SyncMonitor = None  # type: ignore[assignment,misc]
     AccessTracer = None  # type: ignore[assignment,misc]
     AutoTracker = None  # type: ignore[assignment,misc]
-    TrackedProxy = None  # type: ignore[assignment,misc]
-    make_tracked_class = None  # type: ignore[assignment,misc]
-    _HAS_MONITORING = False
-
-T = TypeVar("T")
+    LockPatcher = None  # type: ignore[assignment,misc]
+    _HAS_INSTRUMENT = False
 
 
 _engine: Engine | None = None
-_sync_monitor: SyncMonitor | None = None
 _auto_tracker: AutoTracker | None = None
 _access_tracer: AccessTracer | None = None
+_lock_patcher: LockPatcher | None = None
 _installed = False
 
 
 def install() -> None:
     """
-    Start pyft. Patches threading.Lock, RLock, and Thread lifecycle.
+    Start pyft. Monkey-patches threading.Lock, RLock, Semaphore,
+    BoundedSemaphore, Event, Barrier, and Thread.start / Thread.join so
+    the engine sees synchronization events synchronously with the
+    operation, and installs an AST-rewriting import hook that
+    instruments every newly-imported user module's attribute access.
     """
-    global _engine, _sync_patcher, _auto_tracker, _access_tracer, _installed
+    global _engine, _auto_tracker, _access_tracer, _lock_patcher, _installed
     if _installed:
         return
 
     _engine = Engine()
-    _sync_monitor = SyncMonitor(_engine)
+    _lock_patcher = LockPatcher(_engine)
     _auto_tracker = AutoTracker(_engine)
     _access_tracer = AccessTracer(_engine)
 
-    _sync_monitor.install()
+    _lock_patcher.install()
     _auto_tracker.install()
     _access_tracer.install()
 
@@ -101,47 +101,13 @@ def uninstall() -> None:
         _access_tracer.uninstall()
     if _auto_tracker:
         _auto_tracker.uninstall()
-    if _sync_monitor:
-        _sync_monitor.uninstall()
+    if _lock_patcher:
+        _lock_patcher.uninstall()
 
     _installed = False
 
 
-def track(obj: T) -> T:
-    """
-    Return a TrackedProxy wrapping `obj`. All attribute reads/writes
-    on the returned proxy are monitored for races.
-
-    The proxy is transparent: it forwards all attribute access to the
-    underlying object.
-
-    Example:
-        shared = pyft.track(Counter())
-        # Pass `shared` to threads; pyft will detect races on its attrs.
-    """
-    if _engine is None:
-        raise RuntimeError("pyft.install() must be called before pyft.track()")
-    return TrackedProxy(obj, _engine)  # type: ignore[return-value]
-
-
-def track_class(cls: type) -> type:
-    """
-    Return a new class that is a subclass of `cls` with access tracking
-    built in. All instances of the returned class are monitored.
-
-    Example:
-        @pyft.track_class
-        class Counter:
-            def __init__(self): self.value = 0
-    """
-    if _engine is None:
-        raise RuntimeError(
-            "pyft.install() must be called before pyft.track_class()"
-        )
-    return make_tracked_class(cls, _engine)
-
-
-def report(file=None) -> None:
+def report(file: IO[str] | None = None) -> None:
     """Print the race report to stderr (or `file` if given)."""
     if _engine is None:
         print("pyft: not installed", file=file)
@@ -168,14 +134,18 @@ def get_engine() -> Engine | None:
 
 
 @contextlib.contextmanager
-def context():
+def context() -> Iterator[None]:
     """
     Context manager that installs pyft on enter and prints a race
     report + uninstalls on exit.
 
+    Any module imported INSIDE the ``with`` block is automatically
+    AST-rewritten so its attribute access is traced.
+
     Example:
         with pyft.context():
-            run_concurrent_code()
+            import myapp
+            myapp.run()
     """
     install()
     try:
@@ -185,7 +155,10 @@ def context():
         report()
 
 
-def detect(fn):
+_F = TypeVar("_F", bound=Callable[..., object])
+
+
+def detect(fn: _F) -> _F:
     """
     Decorator that runs a function under pyft and prints the race
     report when it returns.
@@ -193,10 +166,11 @@ def detect(fn):
     Example:
         @pyft.detect
         def test_concurrent():
-            ...
+            import workload
+            workload.do_stuff()
     """
 
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: object, **kwargs: object) -> object:
         install()
         try:
             return fn(*args, **kwargs)
@@ -206,4 +180,4 @@ def detect(fn):
 
     wrapper.__name__ = fn.__name__
     wrapper.__doc__ = fn.__doc__
-    return wrapper
+    return wrapper  # type: ignore[return-value]
