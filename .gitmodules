@@ -1,0 +1,3 @@
+[submodule "python-threading-benchmarks"]
+	path = benchmarks/python-threading-benchmarks
+	url = https://github.com/Alvicorn/python-threading-benchmarks.git

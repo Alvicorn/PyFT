@@ -22,7 +22,9 @@ semantics of Python's no-GIL build.
 
 ```sh
 uv python install 3.14+freethreaded
-git clone https://github.com/Alvicorn/PyFT.git
+git clone --recurse-submodules https://github.com/Alvicorn/PyFT.git
+git submodule init
+git submodule update
 cd pyft
 uv sync
 ```

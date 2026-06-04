@@ -183,6 +183,96 @@ class TestTrackedSemaphore:
             p.uninstall()
 
 
+class TestConditionInterop:
+    """
+    threading.Condition adopts ``_is_owned`` / ``_release_save`` /
+    ``_acquire_restore`` from its underlying lock when present. The
+    default ``Condition()`` uses an RLock, where the fallback
+    ``_is_owned`` (acquire(False) + release) is unsound — it always
+    reports "not owned" because RLock.acquire(False) succeeds on the
+    owning thread. Without forwarding, ``cv.notify_all()`` inside
+    ``with cv:`` raises ``RuntimeError: cannot notify on un-acquired
+    lock``.
+    """
+
+    def test_default_condition_is_owned_reflects_with_block(self) -> None:
+        engine, p = make_patcher()
+        p.install()
+        try:
+            cv = threading.Condition()
+            assert cv._is_owned() is False
+            with cv:
+                assert cv._is_owned() is True
+            assert cv._is_owned() is False
+        finally:
+            p.uninstall()
+
+    def test_default_condition_notify_all_does_not_raise(self) -> None:
+        engine, p = make_patcher()
+        p.install()
+        try:
+            cv = threading.Condition()
+            with cv:
+                cv.notify_all()  # must not raise
+        finally:
+            p.uninstall()
+
+    def test_plain_lock_condition_falls_back_to_default_is_owned(self) -> None:
+        # Condition with an explicit plain Lock should still work: the
+        # tracker must NOT expose _is_owned for a plain Lock (whose C
+        # type lacks _is_owned), so Condition falls back to its
+        # acquire(False)-probe path.
+        engine, p = make_patcher()
+        p.install()
+        try:
+            lock = threading.Lock()
+            assert not hasattr(lock, "_is_owned")
+            cv = threading.Condition(lock)
+            with cv:
+                cv.notify_all()  # must not raise
+        finally:
+            p.uninstall()
+
+    def test_wait_fires_release_and_acquire_engine_events(self) -> None:
+        engine, p = make_patcher()
+        p.install()
+        try:
+            events: list[tuple[str, int]] = []
+            engine.lock_acquire = lambda lid: events.append(("acq", lid))
+            engine.lock_release = lambda lid: events.append(("rel", lid))
+
+            cv = threading.Condition()
+            flag = [False]
+            lock_id = cv._lock._lock_id
+
+            def waiter() -> None:
+                with cv:
+                    cv.wait_for(lambda: flag[0])
+
+            t = threading.Thread(target=waiter)
+            t.start()
+            # Spin briefly so the waiter reaches cv.wait_for before we notify
+            import time
+
+            time.sleep(0.05)
+            with cv:
+                flag[0] = True
+                cv.notify_all()
+            t.join(timeout=2.0)
+            assert not t.is_alive()
+
+            # The wait path must produce at least one release/acquire pair
+            # on the cv's underlying lock (via _release_save /
+            # _acquire_restore). Without forwarding, those engine events
+            # would be missing entirely.
+            wait_rels = sum(1 for e in events if e == ("rel", lock_id))
+            wait_acqs = sum(1 for e in events if e == ("acq", lock_id))
+            assert wait_rels >= 2  # waiter's with-exit + _release_save
+            assert wait_acqs >= 2  # waiter's with-enter + _acquire_restore
+        finally:
+            p.uninstall()
+
+
 @pytest.mark.timeout(10)
 class TestLockPatcherProvidesHB:
     """
