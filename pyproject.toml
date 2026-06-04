@@ -1,6 +1,6 @@
 [project]
 name = "pyvft"
-version = "0.1.0"
+dynamic = ["version"]
 description = "VerifiedFT: a precise dynamic data race detector for free-threaded Python"
 readme = "README.md"
 requires-python = ">=3.14"
@@ -48,11 +48,14 @@ dev = [
 ]
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["pyvft*"]
+
+[tool.setuptools_scm]
+fallback_version = "0.0.0+unknown"
 
 
 [tool.pytest.ini_options]

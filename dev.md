@@ -95,6 +95,27 @@ uv run pytest tests/unit
 uv run pytest tests/integration
 ```
 
+## Release
+
+PyVFT is published to PyPI by [.github/workflows/publish.yaml](.github/workflows/publish.yaml).
+The workflow runs on every `v*` tag push. The package version is derived from the
+tag itself via `setuptools-scm` (configured in [pyproject.toml](pyproject.toml)), so the tag
+is the single source of truth.
+
+### Cutting a release
+
+1. Make sure `main` is green and contains everything you want to ship.
+2. Pick the next version (PEP 440 — e.g. `0.2.0`). The tag must be
+   strictly greater than every version already on PyPI.
+3. Tag the commit and push the tag:
+   ```sh
+   git switch main
+   git pull
+   git tag v<version-tag>
+   git push origin v<version-tag>
+   ```
+4. Watch the `publish` workflow in GitHub Actions and recover as needed.
+
 ## Known limitations
 
 These are intentional design choices in the current implementation.
