@@ -1,5 +1,5 @@
 """
-PyFT benchmark driver.
+PyVFT benchmark driver.
 
 For each (workload, config) cell:
   * 1 warm-up subprocess
@@ -8,14 +8,14 @@ For each (workload, config) cell:
 Each subprocess runs the workload script under one of three configs:
 
   uninstr  python <workload>.py
-  v1       python -m pyft --version v1 <workload>.py
-  v2       python -m pyft --version v2 <workload>.py
+  v1       python -m pyvft --version v1 <workload>.py
+  v2       python -m pyvft --version v2 <workload>.py
 
 While the subprocess is alive the driver samples its resident set size
 at 50 ms via psutil to build a memory-over-time curve.
 
 Headline timing is ``wall_s`` -- the full subprocess lifetime, including
-Python startup, the PyFT import hook + AST rewrite, execution, race
+Python startup, the PyVFT import hook + AST rewrite, execution, race
 report formatting, and exit. AST-rewrite cost is therefore always
 included in the measured overhead.
 
@@ -147,7 +147,7 @@ def build_cmd(workload: str, config: str) -> list[str]:
     if config == "uninstr":
         return [sys.executable, script]
     if config in ("v1", "v2"):
-        return [sys.executable, "-m", "pyft", "--version", config, script]
+        return [sys.executable, "-m", "pyvft", "--version", config, script]
     raise ValueError(f"unknown config: {config}")
 
 
@@ -358,7 +358,7 @@ def capture_system_info() -> dict[str, Any]:
         "platform": platform.platform(),
         "machine": platform.machine(),
         "processor": platform.processor(),
-        "pyft_git_sha": _git_sha(ROOT.parent),
+        "pyvft_git_sha": _git_sha(ROOT.parent),
         "workloads_git_sha": _git_sha(WORKLOADS_DIR.parent),
         "num_threads_setting": "8 threads",
         "sample_interval_s": f"{SAMPLE_INTERVAL_S} s",
@@ -629,7 +629,7 @@ def write_markdown(
         return f"{plots_rel}/{p}"
 
     lines: list[str] = []
-    lines.append("# PyFT benchmark results")
+    lines.append("# PyVFT benchmark results")
     lines.append("")
     lines.append("## System info")
     lines.append("")
@@ -761,7 +761,7 @@ def build_schedule(
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="PyFT benchmark driver")
+    p = argparse.ArgumentParser(description="PyVFT benchmark driver")
     p.add_argument(
         "--runs",
         type=int,
@@ -824,7 +824,7 @@ def main(argv: list[str] | None = None) -> int:
         workloads, configs, args.runs, WARMUP_RUNS, args.seed
     )
     total = len(schedule)
-    print("PyFT benchmark sweep")
+    print("PyVFT benchmark sweep")
     print(f"  workloads: {len(workloads)} ({', '.join(workloads)})")
     print(f"  configs:   {', '.join(configs)}")
     print(

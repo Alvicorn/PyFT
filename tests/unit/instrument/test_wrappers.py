@@ -1,7 +1,7 @@
 import threading
 
-from pyft.detector.engine import Engine
-from pyft.instrument.wrappers import (
+from pyvft.detector.engine import Engine
+from pyvft.instrument.wrappers import (
     AutoTracker,
     TrackedProxy,
     make_tracked_class,
@@ -56,16 +56,16 @@ class TestTrackedProxy:
         assert any(call[1] == "value" for call in calls if call[0] == "write")
 
     def test_internal_attrs_not_tracked(self) -> None:
-        """__pyft_wrapped__ etc. should not trigger engine callbacks."""
+        """__pyvft_wrapped__ etc. should not trigger engine callbacks."""
         engine = Engine()
         reads = []
         engine.read = lambda obj, attr: reads.append(attr)
 
         c = Counter()
         proxy = TrackedProxy(c, engine)
-        _ = proxy.__pyft_wrapped__
+        _ = proxy.__pyvft_wrapped__
 
-        assert "__pyft_wrapped__" not in reads
+        assert "__pyvft_wrapped__" not in reads
 
     def test_repr_includes_wrapped_repr(self) -> None:
         engine = Engine()

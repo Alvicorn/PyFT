@@ -5,8 +5,8 @@ VarState instances created by the Engine's ShadowMap.
 
 import pytest
 
-from pyft.core.var_state import VarStateV1, VarStateV2, VFTVersion
-from pyft.detector.engine import Engine
+from pyvft.core.var_state import VarStateV1, VarStateV2, VFTVersion
+from pyvft.detector.engine import Engine
 
 
 class _Obj:
@@ -60,52 +60,52 @@ class TestEngineVersionSelection:
             # second ThreadState — engine.write uses the current OS
             # thread, so we instead poke the shadow map directly.
             vs = engine.shadow_map.get_or_create(obj, "x")
-            from pyft.core.vector_clock import VectorClock
+            from pyvft.core.vector_clock import VectorClock
 
             # T2 writes without any HB to T1.
             _, write_race, _, _ = vs.check_write(2, VectorClock({2: 1}))
             assert write_race, f"expected WW race under version={v}"
 
 
-class TestPyFTInstallVersion:
+class TestPyVFTInstallVersion:
     def test_install_with_v1(self) -> None:
-        import pyft
+        import pyvft
 
-        pyft.install(version="v1")
+        pyvft.install(version="v1")
         try:
-            engine = pyft.get_engine()
+            engine = pyvft.get_engine()
             assert engine is not None
             assert engine.version is VFTVersion.V1
         finally:
-            pyft.uninstall()
+            pyvft.uninstall()
 
     def test_install_with_v2_default(self) -> None:
-        import pyft
+        import pyvft
 
-        pyft.install()
+        pyvft.install()
         try:
-            engine = pyft.get_engine()
+            engine = pyvft.get_engine()
             assert engine is not None
             assert engine.version is VFTVersion.V2
         finally:
-            pyft.uninstall()
+            pyvft.uninstall()
 
     def test_context_with_v1(self) -> None:
-        import pyft
+        import pyvft
 
-        with pyft.context(version="v1"):
-            engine = pyft.get_engine()
+        with pyvft.context(version="v1"):
+            engine = pyvft.get_engine()
             assert engine is not None
             assert engine.version is VFTVersion.V1
 
     def test_detect_with_v1(self) -> None:
-        import pyft
+        import pyvft
 
         captured = {}
 
-        @pyft.detect(version="v1")
+        @pyvft.detect(version="v1")
         def f() -> None:
-            captured["engine"] = pyft.get_engine()
+            captured["engine"] = pyvft.get_engine()
 
         f()
         eng = captured["engine"]
@@ -113,13 +113,13 @@ class TestPyFTInstallVersion:
         assert eng.version is VFTVersion.V1
 
     def test_detect_bare_decorator_defaults_to_v2(self) -> None:
-        import pyft
+        import pyvft
 
         captured = {}
 
-        @pyft.detect
+        @pyvft.detect
         def f() -> None:
-            captured["engine"] = pyft.get_engine()
+            captured["engine"] = pyvft.get_engine()
 
         f()
         eng = captured["engine"]

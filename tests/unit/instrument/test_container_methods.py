@@ -8,8 +8,8 @@ import ast
 import textwrap
 from typing import Any, Never
 
-from pyft.detector.engine import Engine
-from pyft.instrument.import_hook import (
+from pyvft.detector.engine import Engine
+from pyvft.instrument.import_hook import (
     _CONTAINER_MUTATORS,
     _CONTAINER_READERS,
     _make_runtime_module,
@@ -55,7 +55,7 @@ class TestAstRewrites:
         assert isinstance(call, ast.Call)
         # Outer func is the method helper alias.
         assert isinstance(call.func, ast.Name)
-        assert call.func.id == "__pyft_method__"
+        assert call.func.id == "__pyvft_method__"
         # Args: engine ref, receiver, 'append', 1
         assert isinstance(call.args[2], ast.Constant)
         assert call.args[2].value == "append"
@@ -75,11 +75,11 @@ class TestAstRewrites:
         assert isinstance(stmt, ast.Expr)
         call = stmt.value
         assert isinstance(call, ast.Call)
-        # The .frobnicate access still becomes _pyft_get (Attribute in
+        # The .frobnicate access still becomes _pyvft_get (Attribute in
         # Load context inside a Call), but the call itself isn't
-        # routed through _pyft_method.
+        # routed through _pyvft_method.
         assert isinstance(call.func, ast.Call)
-        assert call.func.func.id == "__pyft_get__"
+        assert call.func.func.id == "__pyvft_get__"
         assert call.func.args[2].value == "frobnicate"
 
     def test_keyword_arguments_preserved(self) -> None:
@@ -95,7 +95,7 @@ class TestAstRewrites:
         fn = tree.body[1]
         stmt = fn.body[0]
         call = stmt.value
-        assert call.func.id == "__pyft_method__"
+        assert call.func.id == "__pyvft_method__"
         assert len(call.keywords) == 1
         assert call.keywords[0].arg == "foo"
 
@@ -104,7 +104,7 @@ class TestAstRewrites:
             tree = transform_source(f"def f(o):\n    o.{name}(1)\n", "<test>")
             fn = tree.body[1]
             call = fn.body[0].value
-            assert call.func.id == "__pyft_method__", name
+            assert call.func.id == "__pyvft_method__", name
             assert call.args[2].value == name
 
     def test_every_reader_name_is_rewritten(self) -> None:
@@ -112,7 +112,7 @@ class TestAstRewrites:
             tree = transform_source(f"def f(o):\n    o.{name}()\n", "<test>")
             fn = tree.body[1]
             call = fn.body[0].value
-            assert call.func.id == "__pyft_method__", name
+            assert call.func.id == "__pyvft_method__", name
             assert call.args[2].value == name
 
 
@@ -123,7 +123,7 @@ class TestRuntimeHelper:
         engine.write = lambda obj, attr: writes.append((id(obj), attr))  # type: ignore[method-assign]
         rt = _make_runtime_module(engine)
         lst: list[int] = []
-        rt._pyft_method(engine, lst, "append", 42)
+        rt._pyvft_method(engine, lst, "append", 42)
         assert lst == [42]
         assert writes == [(id(lst), "__container__")]
 
@@ -133,7 +133,7 @@ class TestRuntimeHelper:
         engine.read = lambda obj, attr: reads.append((id(obj), attr))  # type: ignore[method-assign]
         rt = _make_runtime_module(engine)
         d = {"a": 1, "b": 2}
-        result = rt._pyft_method(engine, d, "get", "a")
+        result = rt._pyvft_method(engine, d, "get", "a")
         assert result == 1
         assert reads == [(id(d), "__container__")]
 
@@ -150,7 +150,7 @@ class TestRuntimeHelper:
             def hello(self) -> str:
                 return "hi"
 
-        assert rt._pyft_method(engine, C(), "hello") == "hi"
+        assert rt._pyvft_method(engine, C(), "hello") == "hi"
         assert seen_calls == []
 
     def test_helper_swallows_engine_errors(self) -> None:
@@ -163,7 +163,7 @@ class TestRuntimeHelper:
         rt = _make_runtime_module(engine)
         lst: list[int] = []
         # Must still append even though engine.write raised.
-        rt._pyft_method(engine, lst, "append", 7)
+        rt._pyvft_method(engine, lst, "append", 7)
         assert lst == [7]
 
 

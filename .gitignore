@@ -4,4 +4,6 @@
 .ruff_cache
 .coverage
 .venv
-src/pyft.egg-info
+dist/
+build/
+*.egg-info/

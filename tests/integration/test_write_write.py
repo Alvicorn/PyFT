@@ -7,9 +7,9 @@ from collections.abc import Callable
 
 import pytest
 
-from pyft.detector.race_log import RaceKind
+from pyvft.detector.race_log import RaceKind
 
-from .helpers import count_races_of_kind, pyft_session, run_threads
+from .helpers import count_races_of_kind, pyvft_session, run_threads
 
 
 class Shared:
@@ -22,7 +22,7 @@ class Shared:
 class TestWriteWriteRace:
     def test_two_threads_write_same_attr(self) -> None:
         """Classic unsynchronized counter increment → write-write race."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Shared()
             shared = track(obj)
 
@@ -48,7 +48,7 @@ class TestWriteWriteRace:
 
     def test_write_write_race_kind(self) -> None:
         """Races on concurrent writes should be WRITE_WRITE kind."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Shared()
             shared = track(obj)
 
@@ -66,7 +66,7 @@ class TestWriteWriteRace:
 
     def test_three_threads_write(self) -> None:
         """Three-way write race is detected."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Shared()
             shared = track(obj)
 
@@ -82,7 +82,7 @@ class TestWriteWriteRace:
 
     def test_race_report_has_correct_attr(self) -> None:
         """Race report should identify the correct attribute."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Shared()
             shared = track(obj)
 
@@ -98,7 +98,7 @@ class TestWriteWriteRace:
 
     def test_race_involves_two_different_threads(self) -> None:
         """Each race report must involve two distinct thread IDs."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Shared()
             shared = track(obj)
 
@@ -112,7 +112,7 @@ class TestWriteWriteRace:
 
     def test_deduplication(self) -> None:
         """The same variable race should only be reported once."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Shared()
             shared = track(obj)
 

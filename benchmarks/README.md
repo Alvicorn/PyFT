@@ -1,6 +1,6 @@
-# pyFT Benchmarking
+# pyvft Benchmarking
 
-Benchmark suite for `pyFT` using
+Benchmark suite for `pyvft` using
 [python-threading-benchmarks](https://github.com/Alvicorn/python-threading-benchmarks)
 (checked out as a git submodule under `python-threading-benchmarks/`).
 
@@ -14,15 +14,15 @@ submodule's `common.NUM_THREADS`), the driver runs:
 across three configurations:
 
 - `uninstr` — `python <workload>.py`
-- `v1` — `python -m pyft --version v1 <workload>.py`
-- `v2` — `python -m pyft --version v2 <workload>.py`
+- `v1` — `python -m pyvft --version v1 <workload>.py`
+- `v2` — `python -m pyvft --version v2 <workload>.py`
 
 While each subprocess is alive, the driver samples its resident-set size
 at 50 ms (`psutil.Process(pid).memory_info().rss`, plus children) to
 build a memory-over-time curve.
 
 **Headline timing is `wall_s`** — the full subprocess lifetime, including
-Python startup, the PyFT import hook + AST rewrite, execution, race
+Python startup, the PyVFT import hook + AST rewrite, execution, race
 report formatting, and exit. AST-rewrite cost is therefore always
 included in the measured overhead.
 
@@ -34,7 +34,7 @@ A geometric mean of overheads is reported across all selected workloads.
 ## Layout
 
 ```
-run_pyft_benchmarks.py
+run_pyvft_benchmarks.py
 python-threading-benchmarks
 results/
 plots/
@@ -51,13 +51,13 @@ plots/
 ## Quick start
 
 ```sh
-# From the root directory of the pyft project, using the parent PyFT venv:
+# From the root directory of the pyvft project, using the parent PyVFT venv:
 uv sync --group benchmark
 
-uv run python run_pyft_benchmarks.py
+uv run python run_pyvft_benchmarks.py
 
 # Smoke-size run (workloads scale problem sizes ~10x down):
-uv run --project .. python run_pyft_benchmarks.py --smoke
+uv run --project .. python run_pyvft_benchmarks.py --smoke
 ```
 
 ## Output
@@ -71,7 +71,7 @@ uv run --project .. python run_pyft_benchmarks.py --smoke
 ## Driver CLI
 
 ```
-run_pyft_benchmarks.py [-h] [--runs N] [--configs LIST] [--benchmarks LIST]
+run_pyvft_benchmarks.py [-h] [--runs N] [--configs LIST] [--benchmarks LIST]
                        [--results-dir DIR] [--plots-dir DIR]
                        [--no-plots] [--smoke] [--timeout S] [--seed N]
 ```
@@ -88,6 +88,6 @@ run_pyft_benchmarks.py [-h] [--runs N] [--configs LIST] [--benchmarks LIST]
 
 ## Results
 On a Windows 11 machine with a Ryzen 7, expect 8.13x slowdown when using v1 and
-7.93x slowdown when using v2. Expect a similar memory overhead of 3.94x when using pyft.
+7.93x slowdown when using v2. Expect a similar memory overhead of 3.94x when using pyvft.
 
 For a more detailed set of results, see the [results/report.md](results/results.md)

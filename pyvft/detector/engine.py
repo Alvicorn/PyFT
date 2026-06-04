@@ -1,5 +1,5 @@
 """
-Engine: central event dispatcher for PyFT.
+Engine: central event dispatcher for PyVFT.
 
 Events handled:
   read(obj, attr)           - a thread read obj.attr

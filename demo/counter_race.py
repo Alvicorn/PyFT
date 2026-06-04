@@ -1,9 +1,9 @@
 """
 Classic write/write race: two threads increment a shared counter with no
-synchronization. PyFT should report a WRITE_WRITE race on ``count``.
+synchronization. PyVFT should report a WRITE_WRITE race on ``count``.
 
 Run with:
-    uv run python -m pyft demo/counter_race.py
+    uv run python -m pyvft demo/counter_race.py
 
 Expected: 1 race (WRITE_WRITE on 'count'). The auto-trace import hook
 AST-rewrites this script so attribute access is intercepted automatically.

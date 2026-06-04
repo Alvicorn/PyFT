@@ -1,7 +1,7 @@
 import threading
 
-from pyft.core.thread_state import ThreadRegistry, ThreadState
-from pyft.core.vector_clock import VectorClock
+from pyvft.core.thread_state import ThreadRegistry, ThreadState
+from pyvft.core.vector_clock import VectorClock
 
 
 class TestThreadState:

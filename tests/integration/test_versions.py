@@ -10,16 +10,16 @@ import threading
 
 import pytest
 
-from pyft.instrument.wrappers import TrackedProxy
+from pyvft.instrument.wrappers import TrackedProxy
 
-from .helpers import assert_no_races, pyft_session, run_threads
+from .helpers import assert_no_races, pyvft_session, run_threads
 
 
 @pytest.mark.timeout(10)
 @pytest.mark.parametrize("version", ["v1", "v2"])
 class TestSameOutcomeAcrossVersions:
     def test_unsync_write_write_races(self, version: str) -> None:
-        with pyft_session(version=version) as (engine, track):
+        with pyvft_session(version=version) as (engine, track):
 
             class C:
                 pass
@@ -39,7 +39,7 @@ class TestSameOutcomeAcrossVersions:
             assert all(r.access_a.attr == "x" for r in reports)
 
     def test_unsync_reader_writer_races(self, version: str) -> None:
-        with pyft_session(version=version) as (engine, track):
+        with pyvft_session(version=version) as (engine, track):
 
             class B:
                 pass
@@ -60,7 +60,7 @@ class TestSameOutcomeAcrossVersions:
             assert len(reports) >= 1
 
     def test_lock_protected_no_race(self, version: str) -> None:
-        with pyft_session(version=version) as (engine, track):
+        with pyvft_session(version=version) as (engine, track):
 
             class C:
                 pass
@@ -78,7 +78,7 @@ class TestSameOutcomeAcrossVersions:
             assert_no_races(engine)
 
     def test_fork_join_post_join_read_no_race(self, version: str) -> None:
-        with pyft_session(version=version) as (engine, track):
+        with pyvft_session(version=version) as (engine, track):
 
             class M:
                 pass
@@ -98,7 +98,7 @@ class TestSameOutcomeAcrossVersions:
             assert_no_races(engine)
 
     def test_each_thread_owns_its_object_no_race(self, version: str) -> None:
-        with pyft_session(version=version) as (engine, track):
+        with pyvft_session(version=version) as (engine, track):
 
             class L:
                 pass
@@ -121,7 +121,7 @@ def test_v1_and_v2_agree_on_race_count_for_classic_ww() -> None:
     """
     keys: dict[str, set[tuple]] = {}
     for version in ("v1", "v2"):
-        with pyft_session(version=version) as (engine, track):
+        with pyvft_session(version=version) as (engine, track):
 
             class C:
                 pass

@@ -1,4 +1,4 @@
-# PyFT benchmark results
+# PyVFT benchmark results
 
 ## System info
 
@@ -9,7 +9,7 @@
 | `platform` | Windows-11-10.0.26200-SP0 |
 | `machine` | AMD64 |
 | `processor` | AMD64 Family 25 Model 68 Stepping 1, AuthenticAMD |
-| `pyft_git_sha` | 8a5da72060e9147fd6038ae42b3d57a4718cc9a7 |
+| `pyvft_git_sha` | 8a5da72060e9147fd6038ae42b3d57a4718cc9a7 |
 | `workloads_git_sha` | b3255cfb326a63027cb4206efd54be6923619650 |
 | `num_threads_setting` | 8 threads |
 | `sample_interval_s` | 0.05 s |

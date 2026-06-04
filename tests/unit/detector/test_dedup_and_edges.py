@@ -9,10 +9,10 @@ import threading
 
 import pytest
 
-from pyft.core.var_state import VarStateV2
-from pyft.detector.engine import Engine
-from pyft.detector.race_log import AccessInfo, RaceKind, RaceLog, RaceReport
-from pyft.detector.shadow_map import ShadowMap
+from pyvft.core.var_state import VarStateV2
+from pyvft.detector.engine import Engine
+from pyvft.detector.race_log import AccessInfo, RaceKind, RaceLog, RaceReport
+from pyvft.detector.shadow_map import ShadowMap
 
 VarState = VarStateV2
 

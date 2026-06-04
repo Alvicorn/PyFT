@@ -1,4 +1,4 @@
-from pyft.core.epoch import _NONE_TID, Epoch, current_epoch
+from pyvft.core.epoch import _NONE_TID, Epoch, current_epoch
 
 
 class TestEpoch:

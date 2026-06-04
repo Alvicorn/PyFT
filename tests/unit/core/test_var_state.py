@@ -1,7 +1,7 @@
 """
 Tests for the VerifiedFT per-variable analyser.
 
-Two implementations live in ``pyft.core.var_state``:
+Two implementations live in ``pyvft.core.var_state``:
 
   * ``VarStateV2`` — epoch-compressed FastTrack (default; matches the
     paper's optimized analyzer).
@@ -20,15 +20,15 @@ from __future__ import annotations
 
 import pytest
 
-from pyft.core.epoch import _NONE_TID, Epoch
-from pyft.core.var_state import (
+from pyvft.core.epoch import _NONE_TID, Epoch
+from pyvft.core.var_state import (
     ReadBottom,
     ReadEpoch,
     ReadVC,
     VarStateV1,
     VarStateV2,
 )
-from pyft.core.vector_clock import VectorClock
+from pyvft.core.vector_clock import VectorClock
 
 # ---------------------------------------------------------------------------
 # Test fixtures / helpers

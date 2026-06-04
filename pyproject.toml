@@ -1,10 +1,41 @@
 [project]
-name = "pyft"
+name = "pyvft"
 version = "0.1.0"
-description = "VerifiedFT: A precise dynamic data race detector for Free-threaded Python"
+description = "VerifiedFT: a precise dynamic data race detector for free-threaded Python"
 readme = "README.md"
 requires-python = ">=3.14"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Alvin Tsang", email = "alvincytsang@gmail.com" }]
+keywords = [
+    "data-race",
+    "race-detection",
+    "free-threaded",
+    "concurrency",
+    "verifiedft",
+    "fasttrack",
+    "dynamic-analysis",
+    "threading",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Software Development :: Debuggers",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
 dependencies = []
+
+[project.urls]
+Repository = "https://github.com/Alvicorn/pyvft"
+Issues = "https://github.com/Alvicorn/pyvft/issues"
+
+[project.scripts]
+pyvft = "pyvft.__main__:main"
 
 [dependency-groups]
 benchmark = [
@@ -23,14 +54,14 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+include = ["pyvft*"]
 
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 filterwarnings = ["ignore::DeprecationWarning"]
-# addopts = "--cov=pyft --cov-report=term-missing"
+# addopts = "--cov=pyvft --cov-report=term-missing"
 
 [tool.mypy]
 python_version = "3.14"
@@ -57,7 +88,7 @@ disable_error_code = [
 ]
 
 [tool.coverage.run]
-source = ["pyft"]
+source = ["pyvft"]
 
 [tool.coverage.report]
 omit = [

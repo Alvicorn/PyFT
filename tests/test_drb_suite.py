@@ -22,8 +22,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 import threading
 import unittest
 
-from pyft.detector.engine import Engine
-from pyft.detector.race_log import RaceLog, RaceReport
+from pyvft.detector.engine import Engine
+from pyvft.detector.race_log import RaceLog, RaceReport
 
 
 class _RaceLogFacade:

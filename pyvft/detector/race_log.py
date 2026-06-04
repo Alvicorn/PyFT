@@ -11,7 +11,7 @@ _real_lock = threading.Lock
 
 
 class RaceKind(Enum):
-    """The three kinds of data race PyFT distinguishes."""
+    """The three kinds of data race PyVFT distinguishes."""
 
     WRITE_WRITE = "write-write"
     READ_WRITE = "read-write"

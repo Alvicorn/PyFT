@@ -1,8 +1,8 @@
 import pytest
 
-from pyft.detector.race_log import RaceKind
+from pyvft.detector.race_log import RaceKind
 
-from .helpers import pyft_session, run_threads
+from .helpers import pyvft_session, run_threads
 
 
 class Data:
@@ -14,7 +14,7 @@ class Data:
 class TestReadWriteRace:
     def test_reader_and_writer_concurrent(self) -> None:
         """One thread reads, another writes — no sync → race."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Data()
             shared = track(obj)
             read_values = []
@@ -37,7 +37,7 @@ class TestReadWriteRace:
 
     def test_race_kind_is_read_write_or_write_read(self) -> None:
         """Mixed read/write race should be READ_WRITE or WRITE_READ."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Data()
             shared = track(obj)
 
@@ -57,7 +57,7 @@ class TestReadWriteRace:
 
     def test_multiple_readers_one_writer(self) -> None:
         """Multiple readers + one writer without sync → races detected."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Data()
             shared = track(obj)
 
@@ -73,7 +73,7 @@ class TestReadWriteRace:
             assert len(engine.race_log.all_reports()) >= 1
 
     def test_one_reader_multiple_writers(self) -> None:
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Data()
             shared = track(obj)
 
@@ -89,7 +89,7 @@ class TestReadWriteRace:
             assert len(engine.race_log.all_reports()) >= 1
 
     def test_read_write_reports_have_distinct_tids(self) -> None:
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Data()
             shared = track(obj)
 

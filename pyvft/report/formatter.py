@@ -82,7 +82,7 @@ def format_summary(log: RaceLog, use_colour: bool = True) -> str:
     if not reports:
         lines.append(_colour(sep, _BOLD, use_colour))
         lines.append(
-            _colour("  pyft: NO DATA RACES DETECTED ", _BOLD, use_colour)
+            _colour("  pyvft: NO DATA RACES DETECTED ", _BOLD, use_colour)
         )
         lines.append(_colour(sep, _BOLD, use_colour))
         return "\n".join(lines)
@@ -91,7 +91,7 @@ def format_summary(log: RaceLog, use_colour: bool = True) -> str:
     noun = "RACE" if n == 1 else "RACES"
     lines.append(_colour(sep, _BOLD + _RED, use_colour))
     lines.append(
-        _colour(f"  pyft: {n} DATA {noun} DETECTED", _BOLD + _RED, use_colour)
+        _colour(f"  pyvft: {n} DATA {noun} DETECTED", _BOLD + _RED, use_colour)
     )
     lines.append(_colour(sep, _BOLD + _RED, use_colour))
     lines.append("")
