@@ -2,7 +2,7 @@ import threading
 
 import pytest
 
-from .helpers import assert_no_races, pyft_session
+from .helpers import assert_no_races, pyvft_session
 
 
 class Payload:
@@ -18,7 +18,7 @@ class TestHappensBeforeForkJoin:
         Parent writes to obj BEFORE starting child thread.
         Child reads. Fork establishes HB → no race.
         """
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Payload()
             shared = track(obj)
 
@@ -42,7 +42,7 @@ class TestHappensBeforeForkJoin:
         Child writes to obj BEFORE joining.
         Parent reads after join. Join establishes HB → no race.
         """
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Payload()
             shared = track(obj)
 
@@ -62,7 +62,7 @@ class TestHappensBeforeForkJoin:
         Sequential thread chain: T1 → T2 → T3, each writes then joins.
         All transitions are HB-ordered → no races.
         """
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Payload()
             shared = track(obj)
 
@@ -81,7 +81,7 @@ class TestHappensBeforeForkJoin:
         Without join, parent reading after child started (but not joined)
         may race with child's write.
         """
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Payload()
             shared = track(obj)
             # ready = threading.Barrier(2)
@@ -113,7 +113,7 @@ class TestHappensBeforeForkJoin:
         Parent forks N children, each writes to a different attribute,
         then parent joins all and reads all → no races.
         """
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
 
             class MultiSlot:
                 pass
@@ -145,7 +145,7 @@ class TestHappensBeforeForkJoin:
         After fork, child's VC must include parent's clock, meaning
         child treats parent's prior writes as happened-before.
         """
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Payload()
             shared = track(obj)
 

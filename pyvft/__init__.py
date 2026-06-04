@@ -1,17 +1,17 @@
 """
-PyFT — VerifiedFT precise dynamic race detector for free-threaded Python.
+PyVFT — VerifiedFT precise dynamic race detector for free-threaded Python.
 
 Public API:
 
-  pyft.install(version="v2")     Start the detector
-  pyft.uninstall()               Stop the detector and restore patched primitives
-  pyft.report()                  Print the race report to stderr
-  pyft.races()                   list[RaceReport] for programmatic inspection
-  pyft.reset()                   Clear all recorded races (keeps detector running)
-  pyft.context(version="v2")     Context manager: install on enter, report on exit
-  @pyft.detect                   Decorator: install around a function, report on return
-  @pyft.detect(version="v1")     Decorator with an explicit VerifiedFT variant
-  pyft.get_engine()              Return the active Engine (for advanced inspection)
+  pyvft.install(version="v2")     Start the detector
+  pyvft.uninstall()               Stop the detector and restore patched primitives
+  pyvft.report()                  Print the race report to stderr
+  pyvft.races()                   list[RaceReport] for programmatic inspection
+  pyvft.reset()                   Clear all recorded races (keeps detector running)
+  pyvft.context(version="v2")     Context manager: install on enter, report on exit
+  @pyvft.detect                   Decorator: install around a function, report on return
+  @pyvft.detect(version="v1")     Decorator with an explicit VerifiedFT variant
+  pyvft.get_engine()              Return the active Engine (for advanced inspection)
 
 The ``version`` argument picks which VerifiedFT analysis variant to use:
 
@@ -22,7 +22,7 @@ The ``version`` argument picks which VerifiedFT analysis variant to use:
 
 Typical usage:
 
-  with pyft.context():
+  with pyvft.context():
       import myapp                 # auto-traced by the import hook
       myapp.run_concurrent_code()
 """
@@ -60,7 +60,7 @@ _installed = False
 
 def install(version: VFTVersion | str = VFTVersion.V2) -> None:
     """
-    Start pyft. Monkey-patches threading.Lock, RLock, Semaphore,
+    Start pyvft. Monkey-patches threading.Lock, RLock, Semaphore,
     BoundedSemaphore, Event, Barrier, and Thread.start / Thread.join so
     the engine sees synchronization events synchronously with the
     operation, and installs an AST-rewriting import hook that
@@ -88,7 +88,7 @@ def install(version: VFTVersion | str = VFTVersion.V2) -> None:
 
 def uninstall() -> None:
     """
-    Stop pyft and restore all patched primitives.
+    Stop pyvft and restore all patched primitives.
     Does NOT clear recorded races — call reset() for that.
     """
     global _installed
@@ -108,7 +108,7 @@ def uninstall() -> None:
 def report(file: IO[str] | None = None) -> None:
     """Print the race report to stderr (or `file` if given)."""
     if _engine is None:
-        print("pyft: not installed", file=file)
+        print("pyvft: not installed", file=file)
         return
     print_summary(_engine.race_log, file=file)
 
@@ -134,14 +134,14 @@ def get_engine() -> Engine | None:
 @contextlib.contextmanager
 def context(version: VFTVersion | str = VFTVersion.V2) -> Iterator[None]:
     """
-    Context manager that installs pyft on enter and prints a race
+    Context manager that installs pyvft on enter and prints a race
     report + uninstalls on exit.
 
     Any module imported INSIDE the ``with`` block is automatically
     AST-rewritten so its attribute access is traced.
 
     Example:
-        with pyft.context(version="v1"):
+        with pyvft.context(version="v1"):
             import myapp
             myapp.run()
     """
@@ -166,9 +166,9 @@ def detect(
 
 def detect(fn=None, *, version: VFTVersion | str = VFTVersion.V2):  # type: ignore[no-untyped-def]
     """
-    Decorator that runs a function under pyft and prints the race
-    report when it returns. Usable bare (``@pyft.detect``) or with a
-    ``version`` kwarg (``@pyft.detect(version="v1")``).
+    Decorator that runs a function under pyvft and prints the race
+    report when it returns. Usable bare (``@pyvft.detect``) or with a
+    ``version`` kwarg (``@pyvft.detect(version="v1")``).
     """
 
     def _wrap(target: _F) -> _F:

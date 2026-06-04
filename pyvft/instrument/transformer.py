@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 _SKIP_PREFIXES = (
-    "pyft",
+    "pyvft",
     "threading",
     "_thread",
     "importlib",

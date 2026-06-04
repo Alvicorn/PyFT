@@ -1,6 +1,6 @@
 import threading
 
-from pyft.detector.engine import Engine
+from pyvft.detector.engine import Engine
 
 
 class SimpleObj:

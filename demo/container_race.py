@@ -2,7 +2,7 @@
 Two scenarios for built-in container race detection.
 
 1. ``list_race``: three threads append to a shared ``list`` with no
-   synchronization. PyFT should report at least one ``WRITE_WRITE``
+   synchronization. PyVFT should report at least one ``WRITE_WRITE``
    race on the synthetic ``__container__`` attribute.
 
 2. ``dict_race``: one thread mutates a shared ``dict`` via ``update``
@@ -11,7 +11,7 @@ Two scenarios for built-in container race detection.
    least one race on ``__container__``.
 
 Run with:
-    uv run python -m pyft demo/container_race.py
+    uv run python -m pyvft demo/container_race.py
 
 Expected: races reported on ``__container__`` for both the list and
 the dict scenarios.

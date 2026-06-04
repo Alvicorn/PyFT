@@ -1,9 +1,9 @@
 """
 Same counter as counter_race.py, but every access is guarded by a single
-threading.Lock. PyFT should report NO races.
+threading.Lock. PyVFT should report NO races.
 
 Run with:
-    uv run python -m pyft demo/counter_locked.py
+    uv run python -m pyvft demo/counter_locked.py
 
 Expected: 0 races. The lock establishes a happens-before chain between
 the two threads' accesses to ``count``.

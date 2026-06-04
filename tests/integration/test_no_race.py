@@ -4,7 +4,7 @@ import pytest
 
 from tests.integration.helpers import (
     assert_no_races,
-    pyft_session,
+    pyvft_session,
     run_threads,
 )
 
@@ -18,7 +18,7 @@ class Counter:
 class TestNoRaceWithLock:
     def test_lock_protected_writes(self) -> None:
         """Two threads write to shared object under a lock → no race."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock = threading.Lock()
             obj = Counter()
             shared = track(obj)
@@ -33,7 +33,7 @@ class TestNoRaceWithLock:
 
     def test_lock_protected_read_and_write(self) -> None:
         """One thread writes, one reads — both under same lock."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock = threading.Lock()
             obj = Counter()
             shared = track(obj)
@@ -54,7 +54,7 @@ class TestNoRaceWithLock:
 
     def test_rlock_protected_writes(self) -> None:
         """RLock (reentrant lock) also establishes HB."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock = threading.RLock()
             obj = Counter()
             shared = track(obj)
@@ -69,7 +69,7 @@ class TestNoRaceWithLock:
 
     def test_multiple_variables_all_protected(self) -> None:
         """When ALL variables are protected, zero races reported."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock = threading.Lock()
 
             class Point:
@@ -94,7 +94,7 @@ class TestNoRaceWithLock:
 class TestNoRaceThreadLocal:
     def test_thread_local_objects_never_flagged(self) -> None:
         """Objects only accessed from one thread are never shared."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             # Each thread creates and uses its own object
             def worker() -> None:
                 obj = Counter()
@@ -107,7 +107,7 @@ class TestNoRaceThreadLocal:
 
     def test_disjoint_attribute_access(self) -> None:
         """Two threads access different attributes of same object."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
 
             class TwoSlot:
                 def __init__(self) -> None:
@@ -139,7 +139,7 @@ class TestNoRaceThreadLocal:
 class TestNoRaceAfterJoin:
     def test_post_join_access_is_safe(self) -> None:
         """After joining a thread, accessing its results is HB-safe."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = Counter()
             shared = track(obj)
 

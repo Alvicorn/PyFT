@@ -14,8 +14,8 @@ _SKIP_ATTRS = frozenset(
         "__doc__",
         "__module__",
         "__weakref__",
-        "__pyft_engine__",
-        "__pyft_tracked__",
+        "__pyvft_engine__",
+        "__pyvft_tracked__",
     }
 )
 
@@ -26,33 +26,33 @@ class TrackedProxy:
     after calling ``engine.read`` / ``engine.write``.
     """
 
-    __slots__ = ("__pyft_wrapped__", "__pyft_engine__")
+    __slots__ = ("__pyvft_wrapped__", "__pyvft_engine__")
 
     def __init__(self, wrapped: Any, engine: "Engine") -> None:  # noqa: ANN401
-        object.__setattr__(self, "__pyft_wrapped__", wrapped)
-        object.__setattr__(self, "__pyft_engine__", engine)
+        object.__setattr__(self, "__pyvft_wrapped__", wrapped)
+        object.__setattr__(self, "__pyvft_engine__", engine)
 
     def __getattribute__(self, name: str) -> Any:  # noqa: ANN401
-        if name in ("__pyft_wrapped__", "__pyft_engine__"):
+        if name in ("__pyvft_wrapped__", "__pyvft_engine__"):
             return object.__getattribute__(self, name)
-        wrapped = object.__getattribute__(self, "__pyft_wrapped__")
-        engine = object.__getattribute__(self, "__pyft_engine__")
+        wrapped = object.__getattribute__(self, "__pyvft_wrapped__")
+        engine = object.__getattribute__(self, "__pyvft_engine__")
         if name not in _SKIP_ATTRS:
             engine.read(wrapped, name)
         return getattr(wrapped, name)
 
     def __setattr__(self, name: str, value: Any) -> None:  # noqa: ANN401
-        if name in ("__pyft_wrapped__", "__pyft_engine__"):
+        if name in ("__pyvft_wrapped__", "__pyvft_engine__"):
             object.__setattr__(self, name, value)
             return
-        wrapped = object.__getattribute__(self, "__pyft_wrapped__")
-        engine = object.__getattribute__(self, "__pyft_engine__")
+        wrapped = object.__getattribute__(self, "__pyvft_wrapped__")
+        engine = object.__getattribute__(self, "__pyvft_engine__")
         if name not in _SKIP_ATTRS:
             engine.write(wrapped, name)
         setattr(wrapped, name, value)
 
     def __repr__(self) -> str:
-        wrapped = object.__getattribute__(self, "__pyft_wrapped__")
+        wrapped = object.__getattribute__(self, "__pyvft_wrapped__")
         return f"TrackedProxy({wrapped!r})"
 
 
@@ -70,15 +70,15 @@ def make_tracked_class(cls: type, engine: "Engine") -> type:
         pass
 
     class Tracked(cls, metaclass=TrackedMeta):  # type: ignore[misc,valid-type]
-        __pyft_engine__ = engine_ref
+        __pyvft_engine__ = engine_ref
 
         def __getattribute__(self, name: str) -> Any:  # noqa: ANN401
-            if name not in _SKIP_ATTRS and not name.startswith("__pyft_"):
+            if name not in _SKIP_ATTRS and not name.startswith("__pyvft_"):
                 engine_ref.read(self, name)
             return super().__getattribute__(name)
 
         def __setattr__(self, name: str, value: Any) -> None:  # noqa: ANN401
-            if name not in _SKIP_ATTRS and not name.startswith("__pyft_"):
+            if name not in _SKIP_ATTRS and not name.startswith("__pyvft_"):
                 engine_ref.write(self, name)
             super().__setattr__(name, value)
 

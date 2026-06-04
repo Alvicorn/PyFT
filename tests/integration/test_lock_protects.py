@@ -2,7 +2,7 @@ import threading
 
 import pytest
 
-from .helpers import assert_no_races, pyft_session, run_threads
+from .helpers import assert_no_races, pyvft_session, run_threads
 
 
 class SharedState:
@@ -16,7 +16,7 @@ class SharedState:
 class TestLockEliminatesRace:
     def test_lock_before_write_no_race(self) -> None:
         """Lock acquired before every write eliminates WRITE_WRITE."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock = threading.Lock()
             obj = SharedState()
             shared = track(obj)
@@ -31,7 +31,7 @@ class TestLockEliminatesRace:
 
     def test_lock_before_read_and_write_no_race(self) -> None:
         """Lock on both read and write sides eliminates READ_WRITE."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock = threading.Lock()
             obj = SharedState()
             shared = track(obj)
@@ -52,7 +52,7 @@ class TestLockEliminatesRace:
 
     def test_partial_lock_still_races(self) -> None:
         """If only one side uses the lock, we still get a race."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock = threading.Lock()
             obj = SharedState()
             shared = track(obj)
@@ -73,7 +73,7 @@ class TestLockEliminatesRace:
 
     def test_wrong_lock_still_races(self) -> None:
         """Two different locks do NOT establish HB between threads."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock_a = threading.Lock()
             lock_b = threading.Lock()
             obj = SharedState()
@@ -95,7 +95,7 @@ class TestLockEliminatesRace:
 
     def test_same_lock_multiple_objects_no_race(self) -> None:
         """One lock protecting multiple objects → no races on any."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock = threading.Lock()
 
             class Pair:
@@ -117,7 +117,7 @@ class TestLockEliminatesRace:
 
     def test_context_manager_lock_no_race(self) -> None:
         """Verify `with lock:` syntax (uses __enter__/__exit__) works correctly."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             lock = threading.Lock()
             obj = SharedState()
             shared = track(obj)

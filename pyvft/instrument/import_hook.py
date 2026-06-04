@@ -3,14 +3,14 @@ PEP 302 import hook that AST-rewrites every user module's source so
 attribute reads, writes, subscripts, and container-method mutations
 call into the engine:
 
-  obj.attr              -> _pyft_get(_pyft_engine, obj, 'attr')
-  obj.attr = v          -> _pyft_set(_pyft_engine, obj, 'attr', v)
-  obj.attr += v         -> _pyft_set(eng, obj, 'attr',
-                                     _pyft_get(eng, obj, 'attr') + v)
-  obj[k]                -> _pyft_getitem(eng, obj, k)
-  obj[k] = v            -> _pyft_setitem(eng, obj, k, v)
-  obj.append(x)         -> _pyft_method(eng, obj, 'append', x)  # mutator
-  obj.get(k)            -> _pyft_method(eng, obj, 'get', k)     # reader
+  obj.attr              -> _pyvft_get(_pyvft_engine, obj, 'attr')
+  obj.attr = v          -> _pyvft_set(_pyvft_engine, obj, 'attr', v)
+  obj.attr += v         -> _pyvft_set(eng, obj, 'attr',
+                                     _pyvft_get(eng, obj, 'attr') + v)
+  obj[k]                -> _pyvft_getitem(eng, obj, k)
+  obj[k] = v            -> _pyvft_setitem(eng, obj, k, v)
+  obj.append(x)         -> _pyvft_method(eng, obj, 'append', x)  # mutator
+  obj.get(k)            -> _pyvft_method(eng, obj, 'get', k)     # reader
 
 Container mutators / readers are recognized by **method name** from a
 curated set; calls of those names trigger a synthetic
@@ -18,7 +18,7 @@ curated set; calls of those names trigger a synthetic
 mutating the same list / dict / set / bytearray are detected as a
 race.
 
-The rewritten module imports a synthetic ``pyft._pyft_runtime`` module
+The rewritten module imports a synthetic ``pyvft._pyvft_runtime`` module
 that exposes the engine and the helper functions.
 """
 
@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from ..detector.engine import Engine
 
 
-_RUNTIME_MODULE_NAME = "pyft._pyft_runtime"
+_RUNTIME_MODULE_NAME = "pyvft._pyvft_runtime"
 
 # Method names treated as container mutations / reads. Matched by
 # string only — any object with a method of these names is treated as
@@ -90,14 +90,14 @@ def _make_runtime_module(engine: "Engine") -> types.ModuleType:
 
     mod = _types.ModuleType(_RUNTIME_MODULE_NAME)
 
-    def _pyft_get(eng: "Engine", obj: Any, attr: str) -> Any:  # noqa: ANN401
+    def _pyvft_get(eng: "Engine", obj: Any, attr: str) -> Any:  # noqa: ANN401
         try:
             eng.read(obj, attr)
         except Exception:
             pass
         return getattr(obj, attr)
 
-    def _pyft_set(
+    def _pyvft_set(
         eng: "Engine",
         obj: Any,  # noqa: ANN401
         attr: str,
@@ -110,7 +110,7 @@ def _make_runtime_module(engine: "Engine") -> types.ModuleType:
         setattr(obj, attr, value)
         return value
 
-    def _pyft_getitem(
+    def _pyvft_getitem(
         eng: "Engine",
         obj: Any,  # noqa: ANN401
         key: Any,  # noqa: ANN401
@@ -121,7 +121,7 @@ def _make_runtime_module(engine: "Engine") -> types.ModuleType:
             pass
         return obj[key]
 
-    def _pyft_setitem(
+    def _pyvft_setitem(
         eng: "Engine",
         obj: Any,  # noqa: ANN401
         key: Any,  # noqa: ANN401
@@ -134,7 +134,7 @@ def _make_runtime_module(engine: "Engine") -> types.ModuleType:
         obj[key] = value
         return value
 
-    def _pyft_method(
+    def _pyvft_method(
         eng: "Engine",
         obj: Any,  # noqa: ANN401
         name: str,
@@ -155,21 +155,21 @@ def _make_runtime_module(engine: "Engine") -> types.ModuleType:
                 pass
         return getattr(obj, name)(*args, **kwargs)
 
-    mod._pyft_engine = engine  # type: ignore[attr-defined]
-    mod._pyft_get = _pyft_get  # type: ignore[attr-defined]
-    mod._pyft_set = _pyft_set  # type: ignore[attr-defined]
-    mod._pyft_getitem = _pyft_getitem  # type: ignore[attr-defined]
-    mod._pyft_setitem = _pyft_setitem  # type: ignore[attr-defined]
-    mod._pyft_method = _pyft_method  # type: ignore[attr-defined]
+    mod._pyvft_engine = engine  # type: ignore[attr-defined]
+    mod._pyvft_get = _pyvft_get  # type: ignore[attr-defined]
+    mod._pyvft_set = _pyvft_set  # type: ignore[attr-defined]
+    mod._pyvft_getitem = _pyvft_getitem  # type: ignore[attr-defined]
+    mod._pyvft_setitem = _pyvft_setitem  # type: ignore[attr-defined]
+    mod._pyvft_method = _pyvft_method  # type: ignore[attr-defined]
     return mod
 
 
-_RT_ENGINE = "__pyft_engine__"
-_RT_GET = "__pyft_get__"
-_RT_SET = "__pyft_set__"
-_RT_GETITEM = "__pyft_getitem__"
-_RT_SETITEM = "__pyft_setitem__"
-_RT_METHOD = "__pyft_method__"
+_RT_ENGINE = "__pyvft_engine__"
+_RT_GET = "__pyvft_get__"
+_RT_SET = "__pyvft_set__"
+_RT_GETITEM = "__pyvft_getitem__"
+_RT_SETITEM = "__pyvft_setitem__"
+_RT_METHOD = "__pyvft_method__"
 
 
 class _AccessTransformer(ast.NodeTransformer):
@@ -319,13 +319,13 @@ class _AccessTransformer(ast.NodeTransformer):
     def visit_Call(self, node: ast.Call) -> ast.AST:
         """
         Rewrite ``obj.<container_method>(*args, **kw)`` into
-        ``_pyft_method(eng, obj, '<name>', *args, **kw)``. Non-method
+        ``_pyvft_method(eng, obj, '<name>', *args, **kw)``. Non-method
         calls and method calls whose name is not in the container set
         pass through unchanged (with their children still visited).
 
         We intercept BEFORE ``generic_visit`` so that the receiver
         ``obj`` is visited as an expression in its own right (any nested
-        attribute access in it gets the usual ``_pyft_get`` wrapping)
+        attribute access in it gets the usual ``_pyvft_get`` wrapping)
         instead of having ``visit_Attribute`` rewrite the
         ``obj.<method>`` lookup into a getattr call.
         """
@@ -357,18 +357,18 @@ class _AccessTransformer(ast.NodeTransformer):
 
 def _prepend_runtime_import(tree: ast.Module) -> None:
     """
-    Insert ``from pyft._pyft_runtime import ...`` after the module
+    Insert ``from pyvft._pyvft_runtime import ...`` after the module
     docstring and any ``from __future__`` imports.
     """
     imp = ast.ImportFrom(
         module=_RUNTIME_MODULE_NAME,
         names=[
-            ast.alias(name="_pyft_engine", asname=_RT_ENGINE),
-            ast.alias(name="_pyft_get", asname=_RT_GET),
-            ast.alias(name="_pyft_set", asname=_RT_SET),
-            ast.alias(name="_pyft_getitem", asname=_RT_GETITEM),
-            ast.alias(name="_pyft_setitem", asname=_RT_SETITEM),
-            ast.alias(name="_pyft_method", asname=_RT_METHOD),
+            ast.alias(name="_pyvft_engine", asname=_RT_ENGINE),
+            ast.alias(name="_pyvft_get", asname=_RT_GET),
+            ast.alias(name="_pyvft_set", asname=_RT_SET),
+            ast.alias(name="_pyvft_getitem", asname=_RT_GETITEM),
+            ast.alias(name="_pyvft_setitem", asname=_RT_SETITEM),
+            ast.alias(name="_pyvft_method", asname=_RT_METHOD),
         ],
         level=0,
     )
@@ -400,7 +400,7 @@ def transform_source(source: str, filename: str) -> ast.Module:
     return tree
 
 
-class _PyFTLoader(importlib.abc.Loader):
+class _PyVFTLoader(importlib.abc.Loader):
     """Loader that wraps a real loader and AST-rewrites the module source
     in ``exec_module``.
     """
@@ -436,10 +436,10 @@ class _PyFTLoader(importlib.abc.Loader):
         exec(code, module.__dict__)
 
 
-class _PyFTFinder(importlib.abc.MetaPathFinder):
+class _PyVFTFinder(importlib.abc.MetaPathFinder):
     """MetaPathFinder placed at the front of ``sys.meta_path``. For each
     not-skipped module name, delegates to the original finders to resolve
-    the spec, then wraps its loader with ``_PyFTLoader``.
+    the spec, then wraps its loader with ``_PyVFTLoader``.
     """
 
     def __init__(self) -> None:
@@ -471,7 +471,7 @@ class _PyFTFinder(importlib.abc.MetaPathFinder):
                 spec.loader, importlib.machinery.SourceFileLoader
             ):
                 return spec
-            spec.loader = _PyFTLoader(spec.loader)
+            spec.loader = _PyVFTLoader(spec.loader)
             return spec
         return None
 
@@ -484,14 +484,14 @@ class ImportHook:
 
     def __init__(self, engine: "Engine") -> None:
         self.engine = engine
-        self._finder: Optional[_PyFTFinder] = None
+        self._finder: Optional[_PyVFTFinder] = None
         self._installed = False
 
     def install(self) -> None:
         if self._installed:
             return
         sys.modules[_RUNTIME_MODULE_NAME] = _make_runtime_module(self.engine)
-        finder = _PyFTFinder()
+        finder = _PyVFTFinder()
         finder.set_delegates(sys.meta_path)  # type: ignore[arg-type]
         sys.meta_path.insert(0, finder)
         self._finder = finder

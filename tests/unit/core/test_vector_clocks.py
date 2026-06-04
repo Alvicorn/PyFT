@@ -1,4 +1,4 @@
-from pyft.core.vector_clock import VectorClock
+from pyvft.core.vector_clock import VectorClock
 
 
 class TestBasicAccessors:

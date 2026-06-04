@@ -1,19 +1,19 @@
-# PyFT demos
+# PyVFT demos
 
-Small, runnable examples of the PyFT race detector. Each script is also
+Small, runnable examples of the PyVFT race detector. Each script is also
 a smoke test — the expected race outcome is documented in the top-of-file
 docstring.
 
 ## Running
 
 Most demos rely on the auto-trace import hook, so run them under the
-`pyft` module:
+`pyvft` module:
 
 ```
-uv run python -m pyft demo/<script>.py
+uv run python -m pyvft demo/<script>.py
 ```
 
-`demo/api_usage.py` is the exception — it calls `pyft.install()` itself
+`demo/api_usage.py` is the exception — it calls `pyvft.install()` itself
 and can be run with plain `python`:
 
 ```
@@ -31,11 +31,11 @@ uv run python demo/api_usage.py
 | `fork_join_safe.py` | Parent writes before fork, reads after join | 0 races (fork + join HB) |
 | `producer_consumer.py` | `threading.Event.set` / `wait` establishes HB | 0 races |
 | `container_race.py` | Concurrent `list.append` + concurrent `dict.update` / `items` / `pop` | races on `__container__` for both the list and the dict |
-| `api_usage.py` | Embedded use of `pyft.context()` and `@pyft.detect` | 1 race + 0 races |
+| `api_usage.py` | Embedded use of `pyvft.context()` and `@pyvft.detect` | 1 race + 0 races |
 
 ## How auto-trace works
 
-When you run `python -m pyft myscript.py`, PyFT installs three things:
+When you run `python -m pyvft myscript.py`, PyVFT installs three things:
 
 1. **LockPatcher** — monkey-patches `threading.Lock`, `RLock`,
    `Semaphore`, `BoundedSemaphore`, `Event.set/wait`, and `Barrier.wait`
@@ -46,6 +46,6 @@ When you run `python -m pyft myscript.py`, PyFT installs three things:
    fork and join HB edges are recorded.
 3. **AccessTracer** — installs a PEP 302 import hook that AST-rewrites
    every imported user module so attribute reads / writes / subscripts
-   call into the engine. Stdlib / pyft itself are skipped.
+   call into the engine. Stdlib / pyvft itself are skipped.
 
-When the script exits, PyFT prints a race report to stderr.
+When the script exits, PyVFT prints a race report to stderr.

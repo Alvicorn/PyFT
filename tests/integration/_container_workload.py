@@ -1,6 +1,6 @@
 """
 Workload module for ``tests/integration/test_container_race.py``. Kept
-separate so the AST import hook installed by ``pyft_session()`` can
+separate so the AST import hook installed by ``pyvft_session()`` can
 AST-rewrite its method calls before any test code touches them.
 """
 

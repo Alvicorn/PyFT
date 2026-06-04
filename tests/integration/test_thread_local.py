@@ -2,7 +2,7 @@ import threading
 
 import pytest
 
-from .helpers import assert_no_races, pyft_session, run_threads
+from .helpers import assert_no_races, pyvft_session, run_threads
 
 
 class LocalCounter:
@@ -14,7 +14,7 @@ class LocalCounter:
 class TestThreadLocalNoRace:
     def test_each_thread_owns_its_object(self) -> None:
         """Each thread creates and uses its own object — no sharing."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
 
             def worker() -> None:
                 obj = LocalCounter()
@@ -28,7 +28,7 @@ class TestThreadLocalNoRace:
 
     def test_thread_local_storage(self) -> None:
         """threading.local() values are per-thread — no sharing."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             tls = threading.local()
 
             def worker() -> None:
@@ -45,7 +45,7 @@ class TestThreadLocalNoRace:
         Thread-local writes before sharing should NOT count toward the
         HB history once the object becomes shared.
         """
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = LocalCounter()
             shared = track(obj)
 
@@ -64,7 +64,7 @@ class TestThreadLocalNoRace:
 
     def test_many_threads_none_sharing(self) -> None:
         """50 threads each with private objects → zero races."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
 
             def worker() -> None:
                 obj = LocalCounter()
@@ -83,7 +83,7 @@ class TestThreadLocalNoRace:
 
     def test_object_created_in_parent_accessed_only_by_child(self) -> None:
         """Object created by parent but only accessed by child → not shared."""
-        with pyft_session() as (engine, track):
+        with pyvft_session() as (engine, track):
             obj = LocalCounter()
             shared = track(obj)
 

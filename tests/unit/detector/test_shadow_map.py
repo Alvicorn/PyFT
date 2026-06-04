@@ -1,8 +1,8 @@
 import gc
 import threading
 
-from pyft.core.var_state import VarStateV2
-from pyft.detector.shadow_map import ShadowMap
+from pyvft.core.var_state import VarStateV2
+from pyvft.detector.shadow_map import ShadowMap
 
 VarState = VarStateV2
 

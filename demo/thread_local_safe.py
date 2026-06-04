@@ -1,11 +1,11 @@
 """
 Each thread creates and uses its OWN object — no sharing, no race.
 
-PyFT must report NO races: a variable is only flagged when at least two
+PyVFT must report NO races: a variable is only flagged when at least two
 distinct threads touch it (the "two threads accessed it" rule).
 
 Run with:
-    uv run python -m pyft demo/thread_local_safe.py
+    uv run python -m pyvft demo/thread_local_safe.py
 
 Expected: 0 races.
 """

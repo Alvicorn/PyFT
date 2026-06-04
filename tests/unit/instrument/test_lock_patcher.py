@@ -10,8 +10,8 @@ import threading
 
 import pytest
 
-from pyft.detector.engine import Engine
-from pyft.instrument.lock_patcher import (
+from pyvft.detector.engine import Engine
+from pyvft.instrument.lock_patcher import (
     _ORIGINAL_BSEMAPHORE,
     _ORIGINAL_LOCK,
     _ORIGINAL_RLOCK,
@@ -281,7 +281,7 @@ class TestLockPatcherProvidesHB:
     """
 
     def test_two_writers_under_lock_no_race(self) -> None:
-        from pyft.instrument.wrappers import AutoTracker, TrackedProxy
+        from pyvft.instrument.wrappers import AutoTracker, TrackedProxy
 
         engine = Engine()
         patcher = LockPatcher(engine)

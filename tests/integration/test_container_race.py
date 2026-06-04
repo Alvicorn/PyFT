@@ -1,7 +1,7 @@
 """
 Integration tests for container-method tracing. The workload lives in
 ``_container_workload.py`` so the import hook installed by
-``pyft_session()`` can rewrite its ``lst.append`` / ``d.update`` calls
+``pyvft_session()`` can rewrite its ``lst.append`` / ``d.update`` calls
 before they execute.
 """
 
@@ -13,19 +13,19 @@ import threading
 
 import pytest
 
-from pyft.detector.race_log import RaceKind
+from pyvft.detector.race_log import RaceKind
 
-from .helpers import assert_no_races, pyft_session
+from .helpers import assert_no_races, pyvft_session
 
 
 @pytest.mark.timeout(15)
 @pytest.mark.parametrize("version", ["v1", "v2"])
 class TestContainerRaceAcrossVersions:
     def test_unsync_list_append_races(self, version: str) -> None:
-        with pyft_session(version=version) as (engine, _track):
+        with pyvft_session(version=version) as (engine, _track):
             # Install the AccessTracer-style import hook explicitly so
             # the workload module is AST-rewritten.
-            from pyft.instrument.transformer import AccessTracer
+            from pyvft.instrument.transformer import AccessTracer
 
             tracer = AccessTracer(engine)
             tracer.install()
@@ -49,8 +49,8 @@ class TestContainerRaceAcrossVersions:
             )
 
     def test_lock_protected_list_append_no_race(self, version: str) -> None:
-        with pyft_session(version=version) as (engine, _track):
-            from pyft.instrument.transformer import AccessTracer
+        with pyvft_session(version=version) as (engine, _track):
+            from pyvft.instrument.transformer import AccessTracer
 
             tracer = AccessTracer(engine)
             tracer.install()
@@ -67,8 +67,8 @@ class TestContainerRaceAcrossVersions:
             assert_no_races(engine)
 
     def test_dict_update_vs_iterate_races(self, version: str) -> None:
-        with pyft_session(version=version) as (engine, _track):
-            from pyft.instrument.transformer import AccessTracer
+        with pyvft_session(version=version) as (engine, _track):
+            from pyvft.instrument.transformer import AccessTracer
 
             tracer = AccessTracer(engine)
             tracer.install()
@@ -87,8 +87,8 @@ class TestContainerRaceAcrossVersions:
             )
 
     def test_per_thread_local_lists_no_race(self, version: str) -> None:
-        with pyft_session(version=version) as (engine, _track):
-            from pyft.instrument.transformer import AccessTracer
+        with pyvft_session(version=version) as (engine, _track):
+            from pyvft.instrument.transformer import AccessTracer
 
             tracer = AccessTracer(engine)
             tracer.install()
@@ -107,8 +107,8 @@ class TestContainerRaceAcrossVersions:
 def test_container_race_kind_is_write_write() -> None:
     """End-to-end smoke: under v2, the classic shared-list race must
     produce at least one WRITE/WRITE race on __container__."""
-    with pyft_session(version="v2") as (engine, _track):
-        from pyft.instrument.transformer import AccessTracer
+    with pyvft_session(version="v2") as (engine, _track):
+        from pyvft.instrument.transformer import AccessTracer
 
         tracer = AccessTracer(engine)
         tracer.install()

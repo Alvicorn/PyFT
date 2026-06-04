@@ -3,7 +3,7 @@ Parent writes BEFORE forking a child, then joins; parent reads AFTER
 join. Both the fork edge and the join edge establish happens-before.
 
 Run with:
-    uv run python -m pyft demo/fork_join_safe.py
+    uv run python -m pyvft demo/fork_join_safe.py
 
 Expected: 0 races. Demonstrates that fork and join correctly propagate
 HB through the engine's thread_start / thread_join events.

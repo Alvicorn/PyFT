@@ -18,15 +18,15 @@ import threading
 
 import pytest
 
-from pyft.core.thread_state import ThreadRegistry
-from pyft.core.var_state import (
+from pyvft.core.thread_state import ThreadRegistry
+from pyvft.core.var_state import (
     ReadBottom,
     ReadEpoch,
     ReadVC,
     VarStateV1,
     VarStateV2,
 )
-from pyft.core.vector_clock import VectorClock
+from pyvft.core.vector_clock import VectorClock
 
 VAR_STATE_CLASSES = (VarStateV1, VarStateV2)
 _IDS = ("V1", "V2")

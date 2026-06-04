@@ -1,10 +1,10 @@
 """
 One thread writes, one thread reads, no synchronization → race.
 
-PyFT should report a READ_WRITE or WRITE_READ race on ``payload``.
+PyVFT should report a READ_WRITE or WRITE_READ race on ``payload``.
 
 Run with:
-    uv run python -m pyft demo/reader_writer_race.py
+    uv run python -m pyvft demo/reader_writer_race.py
 
 Expected: at least one race report.
 """

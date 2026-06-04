@@ -1,8 +1,8 @@
 """
-Shared helpers for pyft integration tests.
+Shared helpers for pyvft integration tests.
 
 Each test creates a fresh Engine + SyncPatcher + AutoTracker so tests
-are fully isolated. We use a helper context manager `pyft_session()`
+are fully isolated. We use a helper context manager `pyvft_session()`
 that installs all components, runs the body, then uninstalls.
 """
 
@@ -12,15 +12,15 @@ import contextlib
 import threading
 from collections.abc import Callable, Iterator
 
-from pyft.core.var_state import VFTVersion
-from pyft.detector.engine import Engine
-from pyft.detector.race_log import RaceKind
-from pyft.instrument.lock_patcher import LockPatcher
-from pyft.instrument.wrappers import AutoTracker, TrackedProxy
+from pyvft.core.var_state import VFTVersion
+from pyvft.detector.engine import Engine
+from pyvft.detector.race_log import RaceKind
+from pyvft.instrument.lock_patcher import LockPatcher
+from pyvft.instrument.wrappers import AutoTracker, TrackedProxy
 
 
 @contextlib.contextmanager
-def pyft_session(
+def pyvft_session(
     version: VFTVersion | str = VFTVersion.V2,
 ) -> Iterator[tuple[Engine, Callable[[object], TrackedProxy]]]:
     """

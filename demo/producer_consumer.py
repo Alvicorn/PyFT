@@ -1,10 +1,10 @@
 """
 Producer/consumer using ``threading.Event``. The producer fills a buffer
 and sets the event; the consumer waits and reads. Event.set/wait
-establish happens-before, so PyFT should report NO races.
+establish happens-before, so PyVFT should report NO races.
 
 Run with:
-    uv run python -m pyft demo/producer_consumer.py
+    uv run python -m pyvft demo/producer_consumer.py
 
 Expected: 0 races.
 """

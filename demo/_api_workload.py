@@ -2,7 +2,7 @@
 Workload module for ``demo/api_usage.py``.
 
 This module is intentionally separate so it can be imported INSIDE the
-``pyft.context()`` / ``@pyft.detect`` scope — the AccessTracer import
+``pyvft.context()`` / ``@pyvft.detect`` scope — the AccessTracer import
 hook then AST-rewrites it and every attribute access is traced.
 """
 

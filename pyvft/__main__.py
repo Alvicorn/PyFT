@@ -1,14 +1,14 @@
 """
-python -m pyft myscript.py [args...]
+python -m pyvft myscript.py [args...]
 
-Runs ``myscript.py`` under the PyFT race detector and prints a race
+Runs ``myscript.py`` under the PyVFT race detector and prints a race
 report to stderr when the script exits. The entry script is
 AST-transformed before exec, and every module it subsequently imports
-goes through the AccessTracer import hook installed by ``pyft.install``.
+goes through the AccessTracer import hook installed by ``pyvft.install``.
 
 Examples:
-  python -m pyft my_threaded_script.py
-  python -m pyft -h
+  python -m pyvft my_threaded_script.py
+  python -m pyvft -h
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def _run_script_instrumented(script_path: str) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="pyft",
+        prog="pyvft",
         description="VerifiedFT data race detector for free-threaded Python",
     )
     parser.add_argument(
@@ -69,9 +69,9 @@ def main(argv: list[str] | None = None) -> int:
     if script_dir not in sys.path:
         sys.path.insert(0, script_dir)
 
-    import pyft
+    import pyvft
 
-    pyft.install(version=args.version)
+    pyvft.install(version=args.version)
 
     exit_code = 0
     try:
@@ -79,15 +79,15 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as e:
         exit_code = e.code if isinstance(e.code, int) else 0
     except Exception as e:
-        print(f"\npyft: script raised an exception: {e}", file=sys.stderr)
+        print(f"\npyvft: script raised an exception: {e}", file=sys.stderr)
         import traceback
 
         traceback.print_exc()
         exit_code = 1
     finally:
-        pyft.uninstall()
-        from pyft import get_engine
-        from pyft.report.formatter import format_summary
+        pyvft.uninstall()
+        from pyvft import get_engine
+        from pyvft.report.formatter import format_summary
 
         engine = get_engine()
         if engine:
