@@ -109,9 +109,9 @@ is the single source of truth.
    strictly greater than every version already on PyPI.
 3. Tag the commit and push the tag:
    ```sh
-   git switch main 
+   git switch main
    git pull
-   git tag v<version-tag> 
+   git tag v<version-tag>
    git push origin v<version-tag>
    ```
 4. Watch the `publish` workflow in GitHub Actions and recover as needed.
