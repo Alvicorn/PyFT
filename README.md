@@ -1,13 +1,15 @@
 # PyFT — VerifiedFT for free-threaded Python
 
-PyFT is a precise dynamic data race detector for free-threaded
+PyFT is a pure-python precise dynamic data race detector for free-threaded
 CPython (PEP 703, 3.14+). It implements the **VerifiedFT** algorithm
 (Wilcox & Freund, PPoPP '18), adapted to the runtime
 semantics of Python's no-GIL build.
 
+Through benchmarking with [python-threading-benchmarks](https://github.com/Alvicorn/python-threading-benchmarks), expect a ~x slowdown and 3.9x memory overhead. See [benchmarks/results/results.md](/benchmarks/results/results.md) for more information.
+
 ## Requirements
 
-- **Python ≥ 3.14 free-threaded build** (the `-t` ABI). PyFT relies on
+- **Python 3.14 free-threaded build** (the `-t` ABI). PyFT relies on
   the free-threaded interpreter for true threading. `pyft` will still run on
   the GIL build but won't surface races prevented by the GIL.
 - [`uv`](https://docs.astral.sh/uv/) for environment management.
@@ -17,6 +19,9 @@ semantics of Python's no-GIL build.
   - `pytest`
   - `pytest-cov`
   - `pytest-timeout`
+    ```sh
+    uv sync --group dev
+    ```
 
 ## Install / setup
 
@@ -109,7 +114,7 @@ def test_concurrent():
 The detector is installed on enter and uninstalled on exit, and a race
 report is printed automatically. Note that **modules imported BEFORE
 `pyft.install()` (or before entering the context) are not retroactively
-instrumented** — keep the workload in a module imported inside the
+instrumented**. Keep the workload in a module imported inside the
 scope, or run the whole program under `python -m pyft`.
 
 #### Public API
@@ -179,16 +184,14 @@ demo/                        runnable example scripts
 # be sure to run the tests with free-threaded python
 uv run --python 3.14t python -m pytest
 
-# or more simply
+# or more simply and specifically
 uv run pytest tests/unit
 uv run pytest tests/integration
 ```
 
 ## Known limitations
 
-These are intentional design choices in the current implementation —
-not bugs we plan to fix, but corners you should know about when
-interpreting a race report.
+These are intentional design choices in the current implementation.
 
 - **Only modules imported *after* `pyft.install()` (or inside the
   `context()` / `@detect` body, or the `python -m pyft` entry script)
@@ -214,17 +217,11 @@ interpreting a race report.
   `(stack not available for prior access)` because capturing stacks
   on every read / write would add substantial overhead.
 - **Only `threading` primitives are modelled.** `asyncio` tasks,
-  `concurrent.futures` async paths, and `multiprocessing` are not
+  and `concurrent.futures` async paths are not
   covered.
 
 ## Future work
 
-Items we'd like to build but haven't yet — contributions welcome.
-
-- **Benchmark suite** measuring runtime overhead
-  `(checker_time − base_time) / base_time` and peak resident memory
-  for `uninstrumented` vs `--version v1` vs `--version v2` on
-  representative workloads.
 - **Bytecode-level instrumentation fallback** so `.pyc`-only modules
   and (eventually) C extensions can be traced.
 - **Race suppression / allowlist API** to silence known-safe
@@ -236,8 +233,6 @@ Items we'd like to build but haven't yet — contributions welcome.
   under-reported result.
 - **Asyncio coverage** — model `asyncio.create_task` as a fork and
   `await task` as a join.
-- **Multiprocessing coverage** — a worker-side stub that aggregates
-  race reports back to the parent.
 - **`--fail-on-race` CLI flag** so CI jobs can gate on a clean run.
 - **Optional Access B stack traces** behind a `--full-stacks` flag,
   accepting the overhead when the user asks for it.
@@ -245,12 +240,6 @@ Items we'd like to build but haven't yet — contributions welcome.
   to an `isinstance` check against `list` / `dict` / `set` /
   `bytearray` so user classes with those method names aren't falsely
   conflated with built-in containers.
-- **Mechanised correspondence to the paper** — generate v1 / v2 from
-  the Coq proofs in the original VerifiedFT artefact, or carry a
-  hand-written paper-to-code cross-reference document.
-- **CI configuration** — GitHub Actions running the full suite on
-  `cpython-3.14+freethreaded` on every push, plus a periodic
-  stability run.
 
 ## References
 
