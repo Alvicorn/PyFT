@@ -7,6 +7,10 @@ requires-python = ">=3.14"
 dependencies = []
 
 [dependency-groups]
+benchmark = [
+    "matplotlib>=3.10.9",
+    "psutil>=7.2.2",
+]
 dev = [
     "pre-commit>=4.6.0",
     "pytest>=9.0.3",
@@ -39,7 +43,7 @@ namespace_packages = true
 # mypy is invoked on the package, and the bare form (test_bar, helpers)
 # used when pre-commit passes individual files without __init__.py chains.
 [[tool.mypy.overrides]]
-module = ["tests.*", "test_*", "helpers", "conftest"]
+module = ["tests.*", "helpers", "conftest"]
 disable_error_code = [
     "method-assign",
     "attr-defined",

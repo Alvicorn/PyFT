@@ -65,6 +65,54 @@ class _TrackedLock:
     def __repr__(self) -> str:
         return f"_TrackedLock({self._real!r})"
 
+    # threading.Condition adopts ``_is_owned`` / ``_release_save`` /
+    # ``_acquire_restore`` from its underlying lock when they exist. RLock
+    # exposes all three; the plain C ``_thread.lock`` exposes none (so
+    # Condition falls back to its acquire(False)-probe ``_is_owned`` and
+    # release()/acquire() for wait, which is correct for a non-reentrant
+    # Lock). We forward via ``__getattr__`` so ``hasattr(tracker, name)``
+    # mirrors the real lock and Condition's adoption logic still gets the
+    # right answer for both flavours. Without this, an RLock-backed
+    # Condition raises ``cannot notify on un-acquired lock`` on every
+    # ``cv.notify()`` / ``cv.wait_for()`` inside a ``with cv:`` block.
+    def __getattr__(self, name: str) -> Any:  # noqa: ANN401
+        if name == "_is_owned":
+            real_method = getattr(self._real, "_is_owned", None)
+            if real_method is None:
+                raise AttributeError(name)
+            return real_method
+        if name == "_release_save":
+            real_method = getattr(self._real, "_release_save", None)
+            if real_method is None:
+                raise AttributeError(name)
+            real_release_save = (
+                real_method  # narrowed to non-None for the closure
+            )
+            engine = self._engine
+            lock_id = self._lock_id
+
+            def _release_save() -> Any:  # noqa: ANN401
+                engine.lock_release(lock_id)
+                return real_release_save()
+
+            return _release_save
+        if name == "_acquire_restore":
+            real_method = getattr(self._real, "_acquire_restore", None)
+            if real_method is None:
+                raise AttributeError(name)
+            real_acquire_restore = (
+                real_method  # narrowed to non-None for the closure
+            )
+            engine = self._engine
+            lock_id = self._lock_id
+
+            def _acquire_restore(state: Any) -> None:  # noqa: ANN401
+                real_acquire_restore(state)
+                engine.lock_acquire(lock_id)
+
+            return _acquire_restore
+        raise AttributeError(name)
+
 
 class _TrackedSemaphore:
     """Wraps a real Semaphore / BoundedSemaphore."""
